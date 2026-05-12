@@ -11,12 +11,12 @@
   "vars": {
     "NODE_ENV": "production",
     "PORT": "3000",
-    "APP_BASE_URL": "https://cetu-lms-api-staging.workers.dev",
+    "APP_BASE_URL": "https://cetu-lms-api-staging.cetu.workers.dev",
     "MONGO_DB_NAME": "CETU",
     "MONGO_COLLECTION_PREFIX": "staging_",
     "KEYCLOAK_AUDIENCE": "cetu-lms-api",
-    "LTI_ISSUER": "https://cetu-lms-api-staging.workers.dev",
-    "CORS_ORIGINS": "https://cetu-lms-web-staging.pages.dev",
+    "LTI_ISSUER": "https://cetu-lms-api-staging.cetu.workers.dev",
+    "CORS_ORIGINS": "https://cetu-lms-web-staging.pages.dev,https://lms-staging.cetu.online",
     "LTI_TOOLS_JSON": "[]"
   }
 }

@@ -2,23 +2,31 @@ import fs from "node:fs";
 import path from "node:path";
 
 const keycloakBaseUrl = process.env.KEYCLOAK_BOOTSTRAP_URL ?? "http://localhost:8080";
+const keycloakPublicBaseUrl = process.env.KEYCLOAK_PUBLIC_BASE_URL?.replace(/\/$/, "");
 const adminUser = process.env.KEYCLOAK_BOOTSTRAP_ADMIN ?? "admin";
 const adminPassword = process.env.KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD ?? "admin";
 const realm = process.env.KEYCLOAK_REALM ?? "cetu";
 const webClientId = process.env.KEYCLOAK_WEB_CLIENT_ID ?? "cetu-lms-web";
 const apiClientId = process.env.KEYCLOAK_API_CLIENT_ID ?? "cetu-lms-api";
+const primaryAdminEmail = process.env.KEYCLOAK_PRIMARY_ADMIN_EMAIL ?? "m.codyhitson@gmail.com";
+const primaryAdminUsername = process.env.KEYCLOAK_PRIMARY_ADMIN_USERNAME ?? primaryAdminEmail;
+const webOrigins = buildWebOrigins();
 
 const token = await getAdminToken();
 
 await upsertRealm();
+await configureRealmPublicUrl();
+await enablePasswordlessRequiredAction();
+await configurePasswordlessBrowserFlow();
+await configurePasswordlessPolicy();
 const webClientUuid = await upsertClient(webClientId, {
   clientId: webClientId,
   enabled: true,
   publicClient: true,
   standardFlowEnabled: true,
   directAccessGrantsEnabled: true,
-  redirectUris: ["http://127.0.0.1:5199/*", "http://localhost:5199/*", "http://127.0.0.1:5173/*", "http://localhost:5173/*"],
-  webOrigins: ["http://127.0.0.1:5199", "http://localhost:5199", "http://127.0.0.1:5173", "http://localhost:5173"]
+  redirectUris: webOrigins.map((origin) => `${origin}/*`),
+  webOrigins
 });
 const apiClientUuid = await upsertClient(apiClientId, {
   clientId: apiClientId,
@@ -50,14 +58,26 @@ const adminSub = await upsertUser({
   lastName: "Admin",
   roles: ["lms_learner", "lms_admin"]
 });
+const primaryAdminSub = await upsertUser({
+  username: primaryAdminUsername,
+  password: primaryAdminInitialPassword(),
+  email: primaryAdminEmail,
+  firstName: "Cody",
+  lastName: "Hitson",
+  roles: ["lms_learner", "lms_admin"],
+  requiredActions: ["webauthn-register-passwordless"]
+});
+await assignRealmAdmin(primaryAdminSub);
 
 upsertEnvValues({
   DEMO_LEARNER_KEYCLOAK_SUB: learnerSub,
-  DEMO_ADMIN_KEYCLOAK_SUB: adminSub
+  DEMO_ADMIN_KEYCLOAK_SUB: adminSub,
+  PRIMARY_ADMIN_KEYCLOAK_SUB: primaryAdminSub
 });
 
 console.log(`DEMO_LEARNER_KEYCLOAK_SUB=${learnerSub}`);
 console.log(`DEMO_ADMIN_KEYCLOAK_SUB=${adminSub}`);
+console.log(`PRIMARY_ADMIN_KEYCLOAK_SUB=${primaryAdminSub}`);
 console.log("Keycloak local development realm is ready");
 
 async function getAdminToken() {
@@ -94,6 +114,112 @@ async function upsertRealm() {
       loginWithEmailAllowed: true
     }
   });
+}
+
+async function configureRealmPublicUrl() {
+  if (!keycloakPublicBaseUrl) {
+    return;
+  }
+
+  const current = await request(`/admin/realms/${realm}`);
+  await request(`/admin/realms/${realm}`, {
+    method: "PUT",
+    body: {
+      ...current,
+      attributes: {
+        ...(current.attributes ?? {}),
+        frontendUrl: keycloakPublicBaseUrl
+      }
+    }
+  });
+}
+
+async function configurePasswordlessPolicy() {
+  const current = await request(`/admin/realms/${realm}`);
+  await request(`/admin/realms/${realm}`, {
+    method: "PUT",
+    body: {
+      ...current,
+      browserFlow: "cetu browser passwordless",
+      webAuthnPolicyPasswordlessRpEntityName: "CETU",
+      webAuthnPolicyPasswordlessSignatureAlgorithms: ["ES256", "RS256"],
+      webAuthnPolicyPasswordlessAttestationConveyancePreference: "not specified",
+      webAuthnPolicyPasswordlessAuthenticatorAttachment: "not specified",
+      webAuthnPolicyPasswordlessRequireResidentKey: "Yes",
+      webAuthnPolicyPasswordlessUserVerificationRequirement: "required",
+      webAuthnPolicyPasswordlessCreateTimeout: 0,
+      webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: true,
+      webAuthnPolicyPasswordlessAcceptableAaguids: [],
+      webAuthnPolicyPasswordlessExtraOrigins: []
+    }
+  });
+}
+
+async function enablePasswordlessRequiredAction() {
+  const actions = await request(`/admin/realms/${realm}/authentication/required-actions`);
+  const action = actions.find((item) => item.alias === "webauthn-register-passwordless");
+  if (!action) {
+    throw new Error("Keycloak does not expose the webauthn-register-passwordless required action");
+  }
+
+  await request(`/admin/realms/${realm}/authentication/required-actions/${action.alias}`, {
+    method: "PUT",
+    body: {
+      ...action,
+      enabled: true,
+      defaultAction: false
+    }
+  });
+}
+
+async function configurePasswordlessBrowserFlow() {
+  const flowAlias = "cetu browser passwordless";
+  const existing = await findFlow(flowAlias);
+  if (!existing) {
+    await request(`/admin/realms/${realm}/authentication/flows/browser/copy`, {
+      method: "POST",
+      body: { newName: flowAlias }
+    });
+  }
+
+  await addAuthenticatorIfMissing(flowAlias, "webauthn-authenticator-passwordless");
+  await setExecutionRequirement(flowAlias, "webauthn-authenticator-passwordless", "ALTERNATIVE");
+}
+
+async function findFlow(alias) {
+  const flows = await request(`/admin/realms/${realm}/authentication/flows`);
+  return flows.find((flow) => flow.alias === alias);
+}
+
+async function addAuthenticatorIfMissing(flowAlias, provider) {
+  const executions = await flowExecutions(flowAlias);
+  if (executions.some((execution) => execution.providerId === provider)) {
+    return;
+  }
+
+  await request(`/admin/realms/${realm}/authentication/flows/${encodeURIComponent(flowAlias)}/executions/execution`, {
+    method: "POST",
+    body: { provider }
+  });
+}
+
+async function setExecutionRequirement(flowAlias, provider, requirement) {
+  const execution = (await flowExecutions(flowAlias)).find((item) => item.providerId === provider);
+  if (!execution) {
+    throw new Error(`Missing ${provider} execution in ${flowAlias}`);
+  }
+
+  await request(`/admin/realms/${realm}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`, {
+    method: "PUT",
+    body: {
+      id: execution.id,
+      requirement
+    }
+  });
+}
+
+async function flowExecutions(flowAlias) {
+  return request(`/admin/realms/${realm}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`);
 }
 
 async function upsertClient(clientId, body) {
@@ -151,7 +277,9 @@ async function upsertUser(input) {
     enabled: true,
     email: input.email,
     firstName: input.firstName,
-    lastName: input.lastName
+    lastName: input.lastName,
+    emailVerified: true,
+    requiredActions: input.requiredActions ?? []
   };
   let userId = existing?.id;
   if (userId) {
@@ -174,6 +302,20 @@ async function upsertUser(input) {
   });
 
   return userId;
+}
+
+async function assignRealmAdmin(userId) {
+  const realmManagementClient = await findClient("realm-management");
+  if (!realmManagementClient) {
+    throw new Error("Missing Keycloak realm-management client");
+  }
+
+  const role = await request(`/admin/realms/${realm}/clients/${realmManagementClient.id}/roles/realm-admin`);
+  await request(`/admin/realms/${realm}/users/${userId}/role-mappings/clients/${realmManagementClient.id}`, {
+    method: "POST",
+    body: [role],
+    ignoreStatuses: [409]
+  });
 }
 
 async function findUser(username) {
@@ -229,4 +371,44 @@ function upsertEnvValues(values) {
   }
 
   fs.writeFileSync(envPath, `${next.join("\n")}\n`);
+}
+
+function buildWebOrigins() {
+  const ports = new Set(["5173", "5174", "5181", "5199"]);
+  const stagingOrigins = new Set([
+    "https://cetu-lms-web-staging.pages.dev",
+    "https://lms-staging.cetu.online"
+  ]);
+  for (const port of (process.env.KEYCLOAK_WEB_REDIRECT_PORTS ?? "").split(",")) {
+    const trimmed = port.trim();
+    if (trimmed) {
+      ports.add(trimmed);
+    }
+  }
+
+  const origins = new Set([
+    ...stagingOrigins,
+    ...[...ports].flatMap((port) => [`http://127.0.0.1:${port}`, `http://localhost:${port}`])
+  ]);
+  for (const origin of (process.env.KEYCLOAK_WEB_EXTRA_ORIGINS ?? "").split(",")) {
+    const trimmed = origin.trim().replace(/\/$/, "");
+    if (trimmed) {
+      origins.add(trimmed);
+    }
+  }
+
+  return [...origins];
+}
+
+function primaryAdminInitialPassword() {
+  const configured = process.env.KEYCLOAK_PRIMARY_ADMIN_TEMP_PASSWORD;
+  if (configured) {
+    return configured;
+  }
+
+  if (new URL(keycloakBaseUrl).hostname === "localhost") {
+    return "AdminPass123!";
+  }
+
+  throw new Error("KEYCLOAK_PRIMARY_ADMIN_TEMP_PASSWORD is required when bootstrapping a non-local Keycloak admin user");
 }
