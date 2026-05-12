@@ -110,6 +110,10 @@ export class LtiLaunchService {
         [LTI_CLAIMS.agsEndpoint]: {
           scope: [LTI_SCOPES.lineItem, LTI_SCOPES.lineItemReadonly, LTI_SCOPES.resultReadonly, LTI_SCOPES.score],
           lineitems: `${this.config.appBaseUrl}/api/v1/lti/ags/lineitems`
+        },
+        [LTI_CLAIMS.custom]: {
+          course_id: input.course.id,
+          cohort_id: contextId
         }
       },
       tool.clientId
