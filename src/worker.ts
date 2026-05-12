@@ -1,4 +1,5 @@
 import { KeycloakAuthService } from "./auth/keycloakAuthService.js";
+import { hasAnyRole, type CurrentUser, type LmsRole } from "./auth/currentUser.js";
 import { loadConfig, type AppConfig } from "./config/config.js";
 import { AppError, isAppError } from "./errors/AppError.js";
 import type { Course, Department, Enrollment, LearnerDashboard, PortalSettings } from "./lms/lmsTypes.js";
@@ -49,6 +50,7 @@ const enrollment: Enrollment = {
   id: "enrollment-pact-demo",
   userId: "demo-learner",
   courseId: "pact",
+  cohortId: "cohort-pact-demo",
   status: "in_progress",
   progressPercent: 35,
   enrolledAt: now
@@ -74,30 +76,41 @@ export default {
         return withCors(json(await new PlatformKeyService(config).jwks()), workerEnv, request);
       }
 
-      await requireCurrentUser(request, config);
+      const currentUser = await requireCurrentUser(request, config);
 
       if (url.pathname === "/api/v1/lms/learner/dashboard" && request.method === "GET") {
+        requireRole(currentUser, "learner", "instructor", "admin");
         return withCors(json(learnerDashboard()), workerEnv, request);
       }
 
       if (url.pathname === "/api/v1/lms/learner/catalog" && request.method === "GET") {
+        requireRole(currentUser, "learner", "instructor", "admin");
         return withCors(json(courses), workerEnv, request);
       }
 
       if (url.pathname === "/api/v1/lms/learner/transcript" && request.method === "GET") {
+        requireRole(currentUser, "learner", "instructor", "admin");
         return withCors(json([transcriptItem()]), workerEnv, request);
       }
 
       if (url.pathname === "/api/v1/lms/admin/overview" && request.method === "GET") {
+        requireRole(currentUser, "admin");
         return withCors(json({ publishedCourses: 1, draftCourses: 0, activeEnrollments: 1, completedEnrollments: 0 }), workerEnv, request);
       }
 
       if (url.pathname === "/api/v1/lms/admin/courses" && request.method === "GET") {
+        requireRole(currentUser, "admin");
         return withCors(json(courses), workerEnv, request);
       }
 
       if (url.pathname === "/api/v1/lms/admin/departments" && request.method === "GET") {
+        requireRole(currentUser, "admin");
         return withCors(json(departments), workerEnv, request);
+      }
+
+      if (url.pathname === "/api/v1/lms/admin/enrollments" && request.method === "GET") {
+        requireRole(currentUser, "admin");
+        return withCors(json([enrollment]), workerEnv, request);
       }
 
       return withCors(errorResponse(404, "NOT_FOUND", "Route not found", requestId), workerEnv, request);
@@ -134,7 +147,13 @@ async function requireCurrentUser(request: Request, config: AppConfig) {
     throw new AppError(401, "AUTH_REQUIRED", "Authentication is required");
   }
 
-  await new KeycloakAuthService(config).verifyAccessToken(authorization.slice("Bearer ".length));
+  return new KeycloakAuthService(config).verifyAccessToken(authorization.slice("Bearer ".length));
+}
+
+function requireRole(user: CurrentUser, ...roles: LmsRole[]) {
+  if (!hasAnyRole(user, roles)) {
+    throw new AppError(403, "FORBIDDEN", "User does not have permission to access this resource");
+  }
 }
 
 function json(body: unknown, init?: ResponseInit) {
