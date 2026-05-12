@@ -38,12 +38,8 @@ export class KeycloakAuthService {
 
     const id = requireSubject(payload.sub);
     const rawRoles = collectRoles(payload, this.config.keycloakAudience);
-    const roles = normalizeRoles(rawRoles);
+    const role = normalizeRole(rawRoles);
     const permissions = normalizePermissions(payload);
-
-    if (!roles.length) {
-      roles.push("learner");
-    }
 
     return {
       id,
@@ -51,7 +47,8 @@ export class KeycloakAuthService {
       email: payload.email,
       name: payload.name ?? payload.preferred_username,
       departmentId: payload.department_id,
-      roles,
+      role,
+      roles: [role],
       permissions
     };
   }
@@ -72,8 +69,11 @@ function collectRoles(payload: KeycloakPayload, audience: string) {
   ];
 }
 
-function normalizeRoles(rawRoles: string[]) {
-  return [...new Set(rawRoles.map((role) => roleMap[role.toLowerCase()]).filter((role): role is LmsRole => Boolean(role)))];
+function normalizeRole(rawRoles: string[]): LmsRole {
+  const roles = new Set(rawRoles.map((role) => roleMap[role.toLowerCase()]).filter((role): role is LmsRole => Boolean(role)));
+  if (roles.has("admin")) return "admin";
+  if (roles.has("instructor")) return "instructor";
+  return "learner";
 }
 
 function normalizePermissions(payload: KeycloakPayload) {

@@ -4,7 +4,7 @@ import { AdminExperienceService } from "../src/lms/services/adminExperienceServi
 import { courseCreateSchema, enrollmentUpdateSchema } from "../src/lms/validators/lmsSchemas.js";
 
 describe("LMS admin write behavior", () => {
-  const actor = { id: "admin-user", roles: ["admin" as const], permissions: [] };
+  const actor = { id: "admin-user", role: "admin" as const, roles: ["admin" as const], permissions: [] };
 
   it("creates courses through the admin service", async () => {
     const service = new AdminExperienceService(new LmsCatalogRepository());

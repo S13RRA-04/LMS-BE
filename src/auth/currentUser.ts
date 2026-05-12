@@ -5,11 +5,12 @@ export type CurrentUser = {
   keycloakSub?: string;
   email?: string;
   name?: string;
+  role: LmsRole;
   roles: LmsRole[];
   permissions: string[];
   departmentId?: string;
 };
 
 export function hasAnyRole(user: CurrentUser, roles: LmsRole[]) {
-  return roles.some((role) => user.roles.includes(role));
+  return roles.includes(user.role);
 }

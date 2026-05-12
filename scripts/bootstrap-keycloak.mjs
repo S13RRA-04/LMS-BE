@@ -39,6 +39,7 @@ const apiClientUuid = await upsertClient(apiClientId, {
 });
 
 await upsertClientRole(apiClientUuid, "lms_learner");
+await upsertClientRole(apiClientUuid, "lms_instructor");
 await upsertClientRole(apiClientUuid, "lms_admin");
 await upsertAudienceMapper(webClientUuid);
 
@@ -50,13 +51,21 @@ const learnerSub = await upsertUser({
   lastName: "Learner",
   roles: ["lms_learner"]
 });
+const instructorSub = await upsertUser({
+  username: "demo-instructor",
+  password: "InstructorPass123!",
+  email: "instructor@example.test",
+  firstName: "CETU",
+  lastName: "Instructor",
+  roles: ["lms_instructor"]
+});
 const adminSub = await upsertUser({
   username: "demo-admin",
   password: "AdminPass123!",
   email: "admin@example.test",
   firstName: "CETU",
   lastName: "Admin",
-  roles: ["lms_learner", "lms_admin"]
+  roles: ["lms_admin"]
 });
 const primaryAdminSub = await upsertUser({
   username: primaryAdminUsername,
@@ -64,18 +73,20 @@ const primaryAdminSub = await upsertUser({
   email: primaryAdminEmail,
   firstName: "Cody",
   lastName: "Hitson",
-  roles: ["lms_learner", "lms_admin"],
+  roles: ["lms_admin"],
   requiredActions: ["webauthn-register-passwordless"]
 });
 await assignRealmAdmin(primaryAdminSub);
 
 upsertEnvValues({
   DEMO_LEARNER_KEYCLOAK_SUB: learnerSub,
+  DEMO_INSTRUCTOR_KEYCLOAK_SUB: instructorSub,
   DEMO_ADMIN_KEYCLOAK_SUB: adminSub,
   PRIMARY_ADMIN_KEYCLOAK_SUB: primaryAdminSub
 });
 
 console.log(`DEMO_LEARNER_KEYCLOAK_SUB=${learnerSub}`);
+console.log(`DEMO_INSTRUCTOR_KEYCLOAK_SUB=${instructorSub}`);
 console.log(`DEMO_ADMIN_KEYCLOAK_SUB=${adminSub}`);
 console.log(`PRIMARY_ADMIN_KEYCLOAK_SUB=${primaryAdminSub}`);
 console.log("Keycloak local development realm is ready");

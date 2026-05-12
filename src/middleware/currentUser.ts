@@ -20,6 +20,7 @@ export function currentUser(config: AppConfig) {
           keycloakSub: verified.keycloakSub ?? verified.id,
           email: verified.email,
           name: verified.name,
+          role: verified.role,
           roles: verified.roles,
           permissions: verified.permissions,
           departmentId: verified.departmentId
@@ -29,6 +30,7 @@ export function currentUser(config: AppConfig) {
           keycloakSub: internalUser.keycloakSub,
           email: internalUser.email,
           name: internalUser.name,
+          role: internalUser.role,
           roles: internalUser.roles,
           permissions: internalUser.permissions,
           departmentId: internalUser.departmentId
@@ -43,6 +45,7 @@ export function currentUser(config: AppConfig) {
 
       const userId = req.header("x-dev-user-id");
       const requestedRoles = parseRoles(req.header("x-dev-user-roles"));
+      const role = primaryRole(requestedRoles);
 
       if (!userId) {
         throw new AppError(401, "AUTH_REQUIRED", "Authentication is required");
@@ -54,7 +57,8 @@ export function currentUser(config: AppConfig) {
         email: req.header("x-dev-user-email") ?? undefined,
         name: req.header("x-dev-user-name") ?? undefined,
         departmentId: req.header("x-dev-department-id") ?? undefined,
-        roles: requestedRoles.length ? requestedRoles : ["learner"],
+        role,
+        roles: [role],
         permissions: requestedRoles
       };
       next();
@@ -62,6 +66,12 @@ export function currentUser(config: AppConfig) {
       next(error);
     }
   };
+}
+
+function primaryRole(requestedRoles: LmsRole[]): LmsRole {
+  if (requestedRoles.includes("admin")) return "admin";
+  if (requestedRoles.includes("instructor")) return "instructor";
+  return "learner";
 }
 
 function extractBearer(header?: string) {

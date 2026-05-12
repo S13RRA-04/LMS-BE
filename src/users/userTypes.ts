@@ -5,6 +5,7 @@ export type InternalUser = {
   keycloakSub: string;
   email?: string;
   name?: string;
+  role: LmsRole;
   roles: LmsRole[];
   permissions: string[];
   departmentId?: string;
@@ -17,6 +18,7 @@ export type UpsertInternalUserInput = {
   keycloakSub: string;
   email?: string;
   name?: string;
+  role: LmsRole;
   roles: LmsRole[];
   permissions: string[];
   departmentId?: string;

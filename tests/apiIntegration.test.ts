@@ -71,7 +71,8 @@ describe("LMS API integration", () => {
     const names = collectionNames(config);
     const user = await db.collection(names.users).findOne({ keycloakSub: "keycloak-admin-sub" });
     expect(user?.email).toBe("admin@example.test");
-    expect(user?.roles).toContain("admin");
+    expect(user?.role).toBe("admin");
+    expect(user?.roles).toEqual(["admin"]);
 
     const auditLog = await db.collection(names.auditLogs).findOne({ action: "course.create" });
     expect(auditLog?.actorUserId).toBe(user?.id);
@@ -105,7 +106,7 @@ async function signKeycloakToken(privateKey: KeyLike, config: AppConfig) {
   return new SignJWT({
     email: "admin@example.test",
     name: "Integration Admin",
-    realm_access: { roles: ["lms_admin"] },
+    realm_access: { roles: ["lms_learner", "lms_admin"] },
     resource_access: { "cetu-lms-api": { roles: ["lms_admin"] } },
     department_id: "cyber-training"
   })

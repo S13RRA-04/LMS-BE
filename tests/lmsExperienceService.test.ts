@@ -7,7 +7,7 @@ describe("LMS Absorb-style experience services", () => {
   it("builds a learner dashboard with catalog, assigned work, and transcript", async () => {
     const service = new LearnerExperienceService(new LmsCatalogRepository());
 
-    const dashboard = await service.getDashboard({ id: "demo-learner", roles: ["learner"], permissions: [] });
+    const dashboard = await service.getDashboard({ id: "demo-learner", role: "learner", roles: ["learner"], permissions: [] });
 
     expect(dashboard.portal.name).toBe("CETU LMS");
     expect(dashboard.assigned).toHaveLength(1);

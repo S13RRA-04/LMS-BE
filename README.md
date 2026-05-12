@@ -35,11 +35,16 @@ Required Keycloak config:
 - `KEYCLOAK_AUDIENCE`
 - `KEYCLOAK_JWKS_URI`
 
-Role normalization maps Keycloak realm roles, client roles, and group names into LMS roles:
+Role normalization maps Keycloak realm roles, client roles, and group names into one effective LMS role:
 
 - `learner` or `lms_learner`
 - `instructor` or `lms_instructor`
 - `admin` or `lms_admin`
+
+If Keycloak sends multiple matching roles, the LMS chooses one role by precedence:
+`admin` > `instructor` > `learner`. Mongo user records store this as `role`
+and also maintain a one-item `roles` array for compatibility with existing
+authorization code.
 
 Development headers are still available outside production when no bearer token is sent. Production requires a valid Keycloak bearer token.
 
