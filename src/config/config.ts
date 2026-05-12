@@ -6,7 +6,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_BASE_URL: z.string().url(),
   MONGO_URI: z.string().min(1),
-  MONGO_DB_NAME: z.string().min(1).default("PACT_V4"),
+  MONGO_DB_NAME: z.string().min(1).default("LMS"),
   MONGO_COLLECTION_PREFIX: z.string().optional(),
   MONGO_TLS_CERT_KEY_FILE: z.string().optional(),
   KEYCLOAK_ISSUER: z.string().url(),

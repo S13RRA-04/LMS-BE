@@ -5,7 +5,7 @@ param(
   [string]$FrontendOrigin = "https://lms.cetu.online",
   [string]$PactApiBaseUrl = "https://pact2-api.cetu.online",
   [string]$PactJwksUrl = "http://127.0.0.1:4200/api/v1/lti/jwks",
-  [string]$KeycloakIssuer = "https://keycloak-lms-staging.cetu.online/realms/cetu"
+  [string]$KeycloakIssuer = "https://keycloak.cetu.online/realms/cetu"
 )
 
 $ErrorActionPreference = "Stop"

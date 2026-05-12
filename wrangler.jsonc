@@ -12,7 +12,7 @@
     "NODE_ENV": "production",
     "PORT": "3000",
     "APP_BASE_URL": "https://cetu-lms-api-staging.cetu.workers.dev",
-    "MONGO_DB_NAME": "PACT_V4",
+    "MONGO_DB_NAME": "LMS",
     "MONGO_COLLECTION_PREFIX": "staging_",
     "KEYCLOAK_AUDIENCE": "cetu-lms-api",
     "LTI_ISSUER": "https://cetu-lms-api-staging.cetu.workers.dev",

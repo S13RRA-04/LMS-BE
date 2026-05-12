@@ -1,6 +1,6 @@
 param(
   [string]$MongoContainer = "pact-lms-mongo",
-  [string]$Database = "PACT_V4"
+  [string]$Database = "LMS"
 )
 
 $ErrorActionPreference = "Stop"
