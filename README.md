@@ -131,6 +131,17 @@ Copy `.env.example` and provide real values:
 
 For Cloudflare-backed staging, see `docs/cloudflare-staging.md`. The API remains a Node/Express service and should be hosted on a Node-capable staging host or exposed through a Cloudflare Tunnel, not deployed directly to Pages.
 
+## GitHub push deployments
+
+Pushing to `master` or `main` runs `.github/workflows/deploy-staging.yml`. The workflow installs dependencies, builds, runs tests, validates the Worker bundle with `wrangler deploy --dry-run`, then deploys `cetu-lms-api-staging` to Cloudflare Workers.
+
+Required GitHub repository or environment secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+Runtime secrets such as `MONGO_URI`, `KEYCLOAK_ISSUER`, `KEYCLOAK_JWKS_URI`, `LTI_PLATFORM_KID`, and `LTI_PLATFORM_PRIVATE_KEY_PEM` must also be present as Cloudflare Worker secrets before the deployed Worker can serve protected routes.
+
 Example tool registration:
 
 ```json
