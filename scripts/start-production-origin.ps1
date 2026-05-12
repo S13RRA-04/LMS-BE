@@ -27,6 +27,21 @@ function Import-DotEnv([string]$Path) {
   }
 }
 
+function Get-DockerContainerEnvValue([string]$ContainerName, [string]$Name) {
+  try {
+    $value = docker inspect $ContainerName --format "{{range .Config.Env}}{{println .}}{{end}}" 2>$null |
+      ForEach-Object {
+        if ($_ -like "$Name=*") {
+          $_.Substring($Name.Length + 1)
+        }
+      } |
+      Select-Object -First 1
+    return $value
+  } catch {
+    return $null
+  }
+}
+
 if (-not (Test-Path -LiteralPath $EnvFile)) {
   throw "Missing $EnvFile."
 }
@@ -41,6 +56,19 @@ $env:CORS_ORIGINS = $FrontendOrigin
 $env:MONGO_COLLECTION_PREFIX = ""
 $env:KEYCLOAK_ISSUER = $KeycloakIssuer
 $env:KEYCLOAK_JWKS_URI = "$KeycloakIssuer/protocol/openid-connect/certs"
+$issuerUri = [Uri]$KeycloakIssuer
+$issuerSegments = $issuerUri.AbsolutePath.Trim("/").Split("/")
+$issuerRealm = if ($issuerSegments.Length -ge 2 -and $issuerSegments[0] -eq "realms") { $issuerSegments[1] } else { "cetu" }
+$env:KEYCLOAK_ADMIN_BASE_URL = if ($env:KEYCLOAK_ADMIN_BASE_URL) { $env:KEYCLOAK_ADMIN_BASE_URL.TrimEnd("/") } else { $issuerUri.GetLeftPart([System.UriPartial]::Authority) }
+$env:KEYCLOAK_ADMIN_REALM = if ($env:KEYCLOAK_ADMIN_REALM) { $env:KEYCLOAK_ADMIN_REALM } else { $issuerRealm }
+$env:KEYCLOAK_ADMIN_TOKEN_REALM = if ($env:KEYCLOAK_ADMIN_TOKEN_REALM) { $env:KEYCLOAK_ADMIN_TOKEN_REALM } else { "master" }
+$env:KEYCLOAK_ADMIN_CLIENT_ID = if ($env:KEYCLOAK_ADMIN_CLIENT_ID) { $env:KEYCLOAK_ADMIN_CLIENT_ID } else { "admin-cli" }
+if (-not $env:KEYCLOAK_ADMIN_USERNAME) {
+  $env:KEYCLOAK_ADMIN_USERNAME = Get-DockerContainerEnvValue "pact-lms-keycloak" "KEYCLOAK_ADMIN"
+}
+if (-not $env:KEYCLOAK_ADMIN_PASSWORD) {
+  $env:KEYCLOAK_ADMIN_PASSWORD = Get-DockerContainerEnvValue "pact-lms-keycloak" "KEYCLOAK_ADMIN_PASSWORD"
+}
 $env:DOTENV_CONFIG_PATH = Join-Path $projectRoot ".env.production.empty"
 
 if (-not (Test-Path -LiteralPath $env:DOTENV_CONFIG_PATH)) {
