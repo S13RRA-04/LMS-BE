@@ -8,6 +8,10 @@ import type { AppConfig } from "../config/config.js";
 import { getMongoDb } from "../db/mongo.js";
 import { MongoLmsRepository } from "../lms/repositories/mongoLmsRepository.js";
 import { MongoAuditLogRepository } from "../audit/mongoAuditLogRepository.js";
+import { LaunchContextRepository } from "../lti/repositories/launchContextRepository.js";
+import { ToolRegistrationRepository } from "../lti/repositories/toolRegistrationRepository.js";
+import { LtiLaunchService } from "../lti/services/ltiLaunchService.js";
+import { PlatformKeyService } from "../lti/services/platformKeyService.js";
 import {
   courseCreateSchema,
   courseUpdateSchema,
@@ -50,6 +54,25 @@ export function createLmsRouter(config: AppConfig) {
     }
   });
 
+  router.post("/courses/:courseId/launch", requireRole("learner", "instructor", "admin"), async (req, res, next) => {
+    try {
+      const { repository, launchService } = await services(config);
+      const user = requireUser(req);
+      const course = await repository.requireCourse(req.params.courseId);
+      const enrollment = await repository.getEnrollmentForUserCourse(user.id, course.id);
+
+      if (!enrollment || enrollment.status === "expired" || enrollment.status === "failed") {
+        throw new AppError(403, "COURSE_ENROLLMENT_REQUIRED", "User is not enrolled in this course");
+      }
+
+      const html = await launchService.createCourseLaunchForm({ course, enrollment, user });
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.status(200).send(html);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get("/admin/overview", requireRole("admin"), async (_req, res, next) => {
     try {
       const { adminExperience } = await services(config);
@@ -63,6 +86,15 @@ export function createLmsRouter(config: AppConfig) {
     try {
       const { adminExperience } = await services(config);
       res.status(200).json(await adminExperience.listCourses());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/enrollments", requireRole("admin"), async (_req, res, next) => {
+    try {
+      const { adminExperience } = await services(config);
+      res.status(200).json(await adminExperience.listEnrollments());
     } catch (error) {
       next(error);
     }
@@ -172,8 +204,15 @@ async function services(config: AppConfig) {
   const repository = new MongoLmsRepository(db, config);
   const auditLogs = new MongoAuditLogRepository(db, config);
   return {
+    repository,
     learnerExperience: new LearnerExperienceService(repository),
-    adminExperience: new AdminExperienceService(repository, auditLogs)
+    adminExperience: new AdminExperienceService(repository, auditLogs),
+    launchService: new LtiLaunchService(
+      config,
+      new ToolRegistrationRepository(config.registeredTools),
+      new LaunchContextRepository(),
+      new PlatformKeyService(config)
+    )
   };
 }
 

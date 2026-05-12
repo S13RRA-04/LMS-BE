@@ -106,12 +106,18 @@ export class MongoLmsRepository implements LmsRepository {
     return (await this.enrollments().find({ userId }).sort({ enrolledAt: -1 }).toArray()).map(stripId);
   }
 
+  async getEnrollmentForUserCourse(userId: string, courseId: string): Promise<Enrollment | undefined> {
+    const enrollment = await this.enrollments().findOne({ userId, courseId });
+    return enrollment ? stripId(enrollment) : undefined;
+  }
+
   async createEnrollment(input: CreateEnrollmentInput): Promise<Enrollment> {
     await this.requireCourse(input.courseId);
     const enrollment: Enrollment = {
       id: input.id ?? crypto.randomUUID(),
       userId: input.userId,
       courseId: input.courseId,
+      cohortId: input.cohortId,
       status: input.status,
       progressPercent: input.progressPercent,
       scorePercent: input.scorePercent,

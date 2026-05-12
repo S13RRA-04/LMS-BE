@@ -37,4 +37,22 @@ describe("LMS admin write behavior", () => {
       })
     ).toThrow();
   });
+
+  it("allows admins to assign a cohort during course enrollment", async () => {
+    const service = new AdminExperienceService(new LmsCatalogRepository());
+
+    const enrollment = await service.createEnrollment(actor, "test-request", {
+      userId: "learner-2",
+      courseId: "pact",
+      cohortId: "cohort-alpha",
+      status: "not_started",
+      progressPercent: 0
+    });
+
+    expect(enrollment).toMatchObject({
+      userId: "learner-2",
+      courseId: "pact",
+      cohortId: "cohort-alpha"
+    });
+  });
 });

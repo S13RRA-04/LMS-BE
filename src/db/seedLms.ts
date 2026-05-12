@@ -32,6 +32,7 @@ const enrollment: Enrollment = {
   id: "enrollment-pact-demo",
   userId: "demo-learner",
   courseId: "pact",
+  cohortId: "cohort-pact-demo",
   status: "in_progress",
   progressPercent: 35,
   enrolledAt: now

@@ -55,6 +55,7 @@ export class LmsCatalogRepository implements LmsRepository {
       id: "enrollment-pact-demo",
       userId: "demo-learner",
       courseId: "pact",
+      cohortId: "cohort-pact-demo",
       status: "in_progress",
       progressPercent: 35,
       enrolledAt: now
@@ -126,12 +127,17 @@ export class LmsCatalogRepository implements LmsRepository {
     return this.enrollments.filter((enrollment) => enrollment.userId === userId);
   }
 
+  async getEnrollmentForUserCourse(userId: string, courseId: string) {
+    return this.enrollments.find((enrollment) => enrollment.userId === userId && enrollment.courseId === courseId);
+  }
+
   async createEnrollment(input: CreateEnrollmentInput) {
     await this.requireCourse(input.courseId);
     const enrollment: Enrollment = {
       id: input.id ?? crypto.randomUUID(),
       userId: input.userId,
       courseId: input.courseId,
+      cohortId: input.cohortId,
       status: input.status,
       progressPercent: input.progressPercent,
       scorePercent: input.scorePercent,

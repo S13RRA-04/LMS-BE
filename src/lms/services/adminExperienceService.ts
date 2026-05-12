@@ -34,6 +34,10 @@ export class AdminExperienceService {
     return this.catalog.listCoursesForAdmin();
   }
 
+  async listEnrollments() {
+    return this.catalog.listEnrollments();
+  }
+
   async createCourse(actor: CurrentUser, requestId: string | undefined, input: CreateCourseInput) {
     const course = await this.catalog.createCourse(input);
     await this.auditLogs?.record({

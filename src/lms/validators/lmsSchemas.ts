@@ -39,6 +39,7 @@ export const enrollmentCreateSchema = z.object({
   id: z.string().min(1).max(120).optional(),
   userId: z.string().min(1).max(255),
   courseId: z.string().min(1).max(120),
+  cohortId: z.string().min(1).max(120).optional(),
   status: enrollmentStatusSchema.default("not_started"),
   progressPercent: z.number().min(0).max(100).default(0),
   scorePercent: z.number().min(0).max(100).optional(),

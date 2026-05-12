@@ -1,9 +1,12 @@
+import crypto from "node:crypto";
 import { AppError } from "../../errors/AppError.js";
 import { LTI_CLAIMS, LTI_SCOPES } from "../ltiConstants.js";
 import type { LaunchContextRepository } from "../repositories/launchContextRepository.js";
 import type { ToolRegistrationRepository } from "../repositories/toolRegistrationRepository.js";
 import type { PlatformKeyService } from "./platformKeyService.js";
 import type { AppConfig } from "../../config/config.js";
+import type { CurrentUser } from "../../auth/currentUser.js";
+import type { Course, Enrollment } from "../../lms/lmsTypes.js";
 
 export type AuthorizationRequest = {
   client_id: string;
@@ -75,6 +78,50 @@ export class LtiLaunchService {
       ...(request.state ? { state: request.state } : {})
     });
   }
+
+  async createCourseLaunchForm(input: { course: Course; enrollment: Enrollment; user: CurrentUser }) {
+    if (input.course.type !== "lti_tool" || !input.course.ltiToolClientId) {
+      throw new AppError(400, "COURSE_NOT_LTI_TOOL", "Course does not have an LTI tool launch configured");
+    }
+
+    const tool = this.tools.requireByClientId(input.course.ltiToolClientId);
+    const deploymentId = tool.deploymentIds[0];
+    const redirectUri = tool.redirectUris[0];
+
+    if (!deploymentId || !redirectUri) {
+      throw new AppError(400, "LTI_TOOL_MISCONFIGURED", "LTI tool is missing deployment or redirect configuration");
+    }
+
+    const contextId = input.enrollment.cohortId ?? input.course.id;
+    const idToken = await this.keys.signJwt(
+      {
+        sub: input.user.id,
+        nonce: crypto.randomUUID(),
+        name: input.user.name,
+        email: input.user.email,
+        [LTI_CLAIMS.messageType]: "LtiResourceLinkRequest",
+        [LTI_CLAIMS.version]: "1.3.0",
+        [LTI_CLAIMS.deploymentId]: deploymentId,
+        [LTI_CLAIMS.targetLinkUri]: tool.targetLinkUri,
+        [LTI_CLAIMS.resourceLink]: { id: input.course.id, title: input.course.title },
+        [LTI_CLAIMS.roles]: [ltiRoleFor(input.user.role)],
+        [LTI_CLAIMS.context]: { id: contextId, title: input.course.title },
+        [LTI_CLAIMS.lis]: { person_sourcedid: input.user.id },
+        [LTI_CLAIMS.agsEndpoint]: {
+          scope: [LTI_SCOPES.lineItem, LTI_SCOPES.lineItemReadonly, LTI_SCOPES.resultReadonly, LTI_SCOPES.score],
+          lineitems: `${this.config.appBaseUrl}/api/v1/lti/ags/lineitems`
+        }
+      },
+      tool.clientId
+    );
+
+    return renderFormPost(redirectUri, { id_token: idToken });
+  }
+}
+
+function ltiRoleFor(role: CurrentUser["role"]) {
+  if (role === "learner") return "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner";
+  return "http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor";
 }
 
 function renderFormPost(action: string, fields: Record<string, string>) {

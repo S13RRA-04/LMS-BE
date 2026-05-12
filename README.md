@@ -65,6 +65,7 @@ These headers are disabled in production until Auth0 middleware is wired.
 - `GET /api/v1/lms/learner/dashboard`
 - `GET /api/v1/lms/learner/catalog`
 - `GET /api/v1/lms/learner/transcript`
+- `POST /api/v1/lms/courses/:courseId/launch`
 - `GET /api/v1/lms/admin/overview`
 - `GET /api/v1/lms/admin/courses`
 - `POST /api/v1/lms/admin/courses`
@@ -72,9 +73,19 @@ These headers are disabled in production until Auth0 middleware is wired.
 - `GET /api/v1/lms/admin/departments`
 - `POST /api/v1/lms/admin/departments`
 - `PATCH /api/v1/lms/admin/departments/:departmentId`
+- `GET /api/v1/lms/admin/enrollments`
 - `POST /api/v1/lms/admin/enrollments`
 - `PATCH /api/v1/lms/admin/enrollments/:enrollmentId`
 - `PATCH /api/v1/lms/admin/portal-settings`
+
+Admins enroll users into courses through `/admin/enrollments`. Course enrollments
+may include `cohortId`; learner dashboard and transcript responses include only
+the courses enrolled for the signed-in user. LTI tool launch from the LMS is
+gated by enrollment: `/courses/:courseId/launch` returns a server-signed LTI
+form post only when the current user has an active enrollment for that course.
+For PACT, the enrollment `cohortId` is emitted as the LTI context ID so the PACT
+service can deliver cohort-specific modules, challenges, games, squads, and
+scoreboards after SSO.
 
 Successful admin writes create audit log records with actor, Keycloak subject, action, target, request ID, timestamp, and safe metadata.
 
@@ -87,6 +98,10 @@ Successful admin writes create audit log records with actor, Keycloak subject, a
 - `POST /api/v1/lti/ags/lineitems` creates AGS line items with write AGS scope.
 - `POST /api/v1/lti/ags/lineitems/:lineItemId/scores` accepts AGS scores with score scope.
 - `POST /api/v1/lti/deep-linking/return` accepts a tool-signed Deep Linking response.
+
+PACT should post individual learner module/game scores and learner-specific
+derived grades to AGS. Squad challenge scores should remain PACT-owned until
+PACT maps them into learner gradebook outcomes.
 
 ## Required environment
 

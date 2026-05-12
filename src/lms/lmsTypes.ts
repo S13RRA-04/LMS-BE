@@ -42,6 +42,7 @@ export type Enrollment = {
   id: string;
   userId: string;
   courseId: string;
+  cohortId?: string;
   status: EnrollmentStatus;
   progressPercent: number;
   scorePercent?: number;

@@ -61,6 +61,7 @@ export async function ensureMongoCollections(config: AppConfig) {
   await db.collection(names.enrollments).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.enrollments).createIndex({ userId: 1, courseId: 1 }, { unique: true });
   await db.collection(names.enrollments).createIndex({ courseId: 1, status: 1 });
+  await db.collection(names.enrollments).createIndex({ courseId: 1, cohortId: 1 });
   await db.collection(names.users).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.users).createIndex({ keycloakSub: 1 }, { unique: true });
   await db.collection(names.users).createIndex({ email: 1 });
