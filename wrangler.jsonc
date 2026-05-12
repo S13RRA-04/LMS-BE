@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cetu-lms-api-staging",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-05-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "PORT": "3000",
+    "APP_BASE_URL": "https://cetu-lms-api-staging.workers.dev",
+    "MONGO_DB_NAME": "CETU",
+    "MONGO_COLLECTION_PREFIX": "staging_",
+    "KEYCLOAK_AUDIENCE": "cetu-lms-api",
+    "LTI_ISSUER": "https://cetu-lms-api-staging.workers.dev",
+    "CORS_ORIGINS": "https://cetu-lms-web-staging.pages.dev",
+    "LTI_TOOLS_JSON": "[]"
+  }
+}

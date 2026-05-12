@@ -8,6 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "db:ensure": "tsx src/db/ensureMongo.ts",
     "db:seed": "tsx src/db/seedLms.ts",
+    "cloudflare:whoami": "wrangler whoami",
+    "cloudflare:secrets:staging": "powershell -ExecutionPolicy Bypass -File ./scripts/set-cloudflare-worker-secrets.ps1",
+    "deploy:staging": "wrangler deploy",
     "local:infra:start": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local-infra.ps1",
     "local:keycloak:bootstrap": "node ./scripts/bootstrap-keycloak.mjs",
     "local:data:reset": "powershell -ExecutionPolicy Bypass -File ./scripts/reset-local-data.ps1",
@@ -31,11 +34,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260511.1",
     "@types/supertest": "^7.2.0",
     "mongodb-memory-server": "^11.1.0",
     "supertest": "^7.2.2",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "wrangler": "^4.90.1"
   }
 }
