@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import { AppError } from "../../errors/AppError.js";
-import type { LineItem, Score } from "../ltiTypes.js";
+import type { LineItem, Score, ScoreRecord } from "../ltiTypes.js";
 
 export class LineItemRepository {
   private readonly lineItems = new Map<string, LineItem>();
-  private readonly scoresByLineItem = new Map<string, Score[]>();
+  private readonly scoresByLineItem = new Map<string, ScoreRecord[]>();
 
   list(): LineItem[] {
     return [...this.lineItems.values()];
@@ -36,8 +36,12 @@ export class LineItemRepository {
   addScore(lineItemId: string, score: Score): Score {
     this.requireById(lineItemId);
     const existing = this.scoresByLineItem.get(lineItemId) ?? [];
-    existing.push(score);
+    existing.push({ id: crypto.randomUUID(), lineItemId, ...score });
     this.scoresByLineItem.set(lineItemId, existing);
     return score;
+  }
+
+  listScores(): ScoreRecord[] {
+    return [...this.scoresByLineItem.values()].flat();
   }
 }

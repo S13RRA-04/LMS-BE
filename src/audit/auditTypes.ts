@@ -7,6 +7,7 @@ export type AuditAction =
   | "enrollment.update"
   | "portal_settings.update"
   | "user.create"
+  | "user.bulk_create"
   | "user.update"
   | "user.delete";
 

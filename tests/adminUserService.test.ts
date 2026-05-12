@@ -49,6 +49,46 @@ describe("LMS admin user management", () => {
     expect(user).toMatchObject({ id: "internal-new-user", email: "new@example.test" });
   });
 
+  it("bulk creates valid users and reports per-row failures", async () => {
+    const keycloak = {
+      createUser: vi
+        .fn()
+        .mockResolvedValueOnce({
+          keycloakSub: "keycloak-bulk-1",
+          username: "bulk-1",
+          email: "bulk-1@example.test",
+          role: "learner",
+          permissions: ["lms_learner"],
+          enabled: true
+        })
+        .mockRejectedValueOnce(new Error("duplicate username"))
+    };
+    const users = {
+      upsertFromKeycloak: vi.fn().mockImplementation((input) =>
+        Promise.resolve({
+          id: input.username,
+          roles: [input.role],
+          createdAt: "2026-05-12T00:00:00.000Z",
+          updatedAt: "2026-05-12T00:00:00.000Z",
+          ...input
+        })
+      )
+    };
+    const auditLogs = { record: vi.fn().mockResolvedValue(undefined) };
+    const service = new AdminUserService(keycloak as unknown as KeycloakAdminClient, users as unknown as MongoUserRepository, auditLogs as never);
+
+    const result = await service.createUsers(actor, "request-bulk", [
+      { username: "bulk-1", email: "bulk-1@example.test", role: "learner" },
+      { username: "bulk-2", email: "bulk-2@example.test", role: "learner" }
+    ]);
+
+    expect(result.created).toHaveLength(1);
+    expect(result.failed).toEqual([
+      expect.objectContaining({ row: 2, username: "bulk-2", email: "bulk-2@example.test", message: "duplicate username" })
+    ]);
+    expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.bulk_create" }));
+  });
+
   it("soft-deletes the internal projection after deleting the Keycloak user", async () => {
     const keycloak = { deleteUser: vi.fn().mockResolvedValue(undefined) };
     const users = {

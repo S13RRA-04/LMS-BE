@@ -3,7 +3,7 @@ import type { MongoAuditLogRepository } from "../audit/mongoAuditLogRepository.j
 import { AppError } from "../errors/AppError.js";
 import type { KeycloakAdminClient } from "../integrations/keycloak/keycloakAdminClient.js";
 import type { MongoUserRepository } from "./mongoUserRepository.js";
-import type { CreateAdminUserInput, UpdateAdminUserInput } from "./userTypes.js";
+import type { AdminUser, CreateAdminUserInput, UpdateAdminUserInput } from "./userTypes.js";
 
 export class AdminUserService {
   constructor(
@@ -56,6 +56,36 @@ export class AdminUserService {
     });
 
     return user;
+  }
+
+  async createUsers(actor: CurrentUser, requestId: string | undefined, inputs: CreateAdminUserInput[]) {
+    const created: AdminUser[] = [];
+    const failed: Array<{ row: number; username: string; email: string; code: string; message: string }> = [];
+
+    for (const [index, input] of inputs.entries()) {
+      try {
+        created.push(await this.createUser(actor, requestId, input));
+      } catch (error) {
+        failed.push({
+          row: index + 1,
+          username: input.username,
+          email: input.email,
+          code: error instanceof AppError ? error.code : "USER_CREATE_FAILED",
+          message: error instanceof Error ? error.message : "User creation failed"
+        });
+      }
+    }
+
+    await this.auditLogs?.record({
+      action: "user.bulk_create",
+      actor,
+      targetType: "user",
+      targetId: "bulk",
+      requestId,
+      metadata: { requested: inputs.length, created: created.length, failed: failed.length }
+    });
+
+    return { created, failed };
   }
 
   async updateUser(actor: CurrentUser, requestId: string | undefined, id: string, input: UpdateAdminUserInput) {

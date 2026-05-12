@@ -64,6 +64,21 @@ export type Score = {
   comment?: string;
 };
 
+export type ScoreRecord = Score & {
+  id: string;
+  lineItemId: string;
+};
+
+export type AgsGradeRecord = ScoreRecord & {
+  lineItemLabel: string;
+  lineItemScoreMaximum: number;
+  resourceId?: string;
+  tag?: string;
+  courseId?: string;
+  cohortId?: string;
+  contentTitle?: string;
+};
+
 export type DeepLinkContentItem = {
   type: string;
   title: string;

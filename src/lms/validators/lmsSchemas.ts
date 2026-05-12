@@ -80,6 +80,10 @@ export const adminUserCreateSchema = z.object({
   temporaryPassword: z.string().min(12).max(256).optional()
 }).strict();
 
+export const adminUserBulkCreateSchema = z.object({
+  users: z.array(adminUserCreateSchema).min(1).max(100)
+}).strict();
+
 export const adminUserUpdateSchema = adminUserCreateSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: "At least one user field is required" });

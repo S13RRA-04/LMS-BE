@@ -17,6 +17,6 @@
     "KEYCLOAK_AUDIENCE": "cetu-lms-api",
     "LTI_ISSUER": "https://cetu-lms-api-staging.cetu.workers.dev",
     "CORS_ORIGINS": "https://cetu-lms-web-staging.pages.dev,https://lms-staging.cetu.online",
-    "LTI_TOOLS_JSON": "[]"
+    "LTI_TOOLS_JSON": "[{\"clientId\":\"pact-tool\",\"name\":\"PACT\",\"deploymentIds\":[\"pact-course-deployment\"],\"redirectUris\":[\"https://cetu-pact-api-staging.cetu.workers.dev/api/v1/lti/launch\"],\"deepLinkRedirectUris\":[\"https://cetu-pact-api-staging.cetu.workers.dev/api/v1/lti/deep-link\"],\"targetLinkUri\":\"https://cetu-pact-api-staging.cetu.workers.dev/launch\",\"publicJwks\":{\"keys\":[{\"kty\":\"RSA\",\"n\":\"75fmvoJJZB5SG0exYvnMVsEGvHV9QqfjpuUcINWoJx1g5dgImwGMzoN85il5OPuz8dG9Yoi8NMj_ddkyoMDqGUNpJCPPshS7wlgtilZcNdtRS1acmriQPiJjWRAQiyNblMogsaywuVPZsN66GCGv3PR9XDpjm8_1zidMWa0mYN2fTu3Aq0aiWk7o4qZPVilKm0RNs30_Fw_4hYe3AFeVG78_aPoxCA-EuRRcqKCqwo8Uue6Iag2iKCj1jWSBDDhDOrJKzOQiPNxzMCR_yGD6baGYTzu803amOcUlyPP_NnSqyBjxdo1mS9uFgpecv4EC5cPrWnzMk0ffytQCfT07kQ\",\"e\":\"AQAB\",\"kid\":\"pact-tool-key\",\"alg\":\"RS256\",\"use\":\"sig\"}]},\"scopes\":[]}]"
   }
 }

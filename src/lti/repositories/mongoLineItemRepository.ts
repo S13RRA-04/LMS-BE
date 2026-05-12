@@ -3,7 +3,7 @@ import type { Collection, Db, OptionalUnlessRequiredId } from "mongodb";
 import type { AppConfig } from "../../config/config.js";
 import { collectionNames } from "../../db/mongo.js";
 import { AppError } from "../../errors/AppError.js";
-import type { DeepLinkContentItem, DeepLinkedContent, LineItem, Score } from "../ltiTypes.js";
+import type { DeepLinkContentItem, DeepLinkedContent, LineItem, Score, ScoreRecord } from "../ltiTypes.js";
 
 type Stored<T> = T & { _id?: unknown };
 
@@ -74,6 +74,10 @@ export class MongoLineItemRepository {
     return score;
   }
 
+  async listScores(): Promise<ScoreRecord[]> {
+    return (await this.scores().find().sort({ timestamp: -1 }).toArray()).map(stripId);
+  }
+
   async saveDeepLinkedContent(input: {
     toolClientId: string;
     item: DeepLinkContentItem;
@@ -109,7 +113,7 @@ export class MongoLineItemRepository {
   }
 
   private scores() {
-    return this.db.collection<Stored<Score & { id: string; lineItemId: string }>>(this.names.ltiScores);
+    return this.db.collection<Stored<ScoreRecord>>(this.names.ltiScores);
   }
 
   private contentItems() {

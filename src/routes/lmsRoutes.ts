@@ -12,12 +12,14 @@ import { KeycloakAdminClient } from "../integrations/keycloak/keycloakAdminClien
 import { LaunchContextRepository } from "../lti/repositories/launchContextRepository.js";
 import { ToolRegistrationRepository } from "../lti/repositories/toolRegistrationRepository.js";
 import { LtiLaunchService } from "../lti/services/ltiLaunchService.js";
+import { AgsService } from "../lti/services/agsService.js";
 import { PlatformKeyService } from "../lti/services/platformKeyService.js";
 import { MongoLineItemRepository } from "../lti/repositories/mongoLineItemRepository.js";
 import { AdminUserService } from "../users/adminUserService.js";
 import { MongoUserRepository } from "../users/mongoUserRepository.js";
 import {
   adminUserCreateSchema,
+  adminUserBulkCreateSchema,
   adminUserUpdateSchema,
   courseCreateSchema,
   courseUpdateSchema,
@@ -115,6 +117,15 @@ export function createLmsRouter(config: AppConfig) {
         contentItems: await lineItems.listDeepLinkedContent(),
         lineItems: await lineItems.list()
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/admin/ags/grades", requireRole("admin"), async (_req, res, next) => {
+    try {
+      const db = await getMongoDb(config);
+      res.status(200).json(await new AgsService(new MongoLineItemRepository(db, config)).listAdminGradebook());
     } catch (error) {
       next(error);
     }
@@ -236,6 +247,17 @@ export function createLmsRouter(config: AppConfig) {
     try {
       const { adminUsers } = await services(config);
       res.status(201).json(await adminUsers.createUser(requireUser(req), req.requestId, adminUserCreateSchema.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/admin/users/bulk", requireRole("admin"), async (req, res, next) => {
+    try {
+      const { adminUsers } = await services(config);
+      const body = adminUserBulkCreateSchema.parse(req.body);
+      const result = await adminUsers.createUsers(requireUser(req), req.requestId, body.users);
+      res.status(result.failed.length ? 207 : 201).json(result);
     } catch (error) {
       next(error);
     }
