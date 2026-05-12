@@ -79,7 +79,7 @@ export class LtiLaunchService {
     });
   }
 
-  async createCourseLaunchForm(input: { course: Course; enrollment: Enrollment; user: CurrentUser }) {
+  async createCourseLaunchForm(input: { course: Course; enrollment?: Enrollment; user: CurrentUser }) {
     if (input.course.type !== "lti_tool" || !input.course.ltiToolClientId) {
       throw new AppError(400, "COURSE_NOT_LTI_TOOL", "Course does not have an LTI tool launch configured");
     }
@@ -92,7 +92,7 @@ export class LtiLaunchService {
       throw new AppError(400, "LTI_TOOL_MISCONFIGURED", "LTI tool is missing deployment or redirect configuration");
     }
 
-    const contextId = input.enrollment.cohortId ?? input.course.id;
+    const contextId = input.enrollment?.cohortId ?? input.course.id;
     const idToken = await this.keys.signJwt(
       {
         sub: input.user.id,

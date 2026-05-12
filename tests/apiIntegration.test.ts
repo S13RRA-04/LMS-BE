@@ -134,6 +134,47 @@ describe("LMS API integration", () => {
     expect(launch.text).toContain("https://pact.example.test/lti/launch");
   });
 
+  it("allows admins to launch an LTI course without enrollment", async () => {
+    const app = createApp(config, createLogger(config));
+
+    await request(app)
+      .post("/api/v1/lms/admin/courses")
+      .set("x-dev-user-id", "admin-user")
+      .set("x-dev-user-roles", "admin")
+      .send({
+        id: "pact-admin-open",
+        slug: "pact-admin-open",
+        title: "PACT Admin Open",
+        description: "Practical cyber training course and tool launch.",
+        type: "lti_tool",
+        status: "published",
+        category: "Cyber Operations",
+        departmentIds: ["cyber-training"],
+        allowSelfEnrollment: false,
+        estimatedMinutes: 120,
+        ltiToolClientId: "pact-tool"
+      })
+      .expect(201);
+
+    await request(app)
+      .post("/api/v1/lms/courses/pact-admin-open/launch")
+      .set("x-dev-user-id", "learner-without-enrollment")
+      .set("x-dev-user-roles", "learner")
+      .expect(403);
+
+    const launch = await request(app)
+      .post("/api/v1/lms/courses/pact-admin-open/launch")
+      .set("x-dev-user-id", "admin-without-enrollment")
+      .set("x-dev-user-roles", "admin")
+      .set("x-dev-user-email", "admin-open@example.test")
+      .set("x-dev-user-name", "Admin Open")
+      .expect(200);
+
+    expect(launch.headers["content-type"]).toContain("text/html");
+    expect(launch.text).toContain("id_token");
+    expect(launch.text).toContain("https://pact.example.test/lti/launch");
+  });
+
   it("allows admins to initiate PACT Deep Linking for an LTI course", async () => {
     const app = createApp(config, createLogger(config));
 

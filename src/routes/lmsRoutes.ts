@@ -69,12 +69,13 @@ export function createLmsRouter(config: AppConfig) {
       const user = requireUser(req);
       const course = await repository.requireCourse(req.params.courseId);
       const enrollment = await repository.getEnrollmentForUserCourse(user.id, course.id);
+      const enrollmentBlocksLaunch = !enrollment || enrollment.status === "expired" || enrollment.status === "failed";
 
-      if (!enrollment || enrollment.status === "expired" || enrollment.status === "failed") {
+      if (user.role !== "admin" && enrollmentBlocksLaunch) {
         throw new AppError(403, "COURSE_ENROLLMENT_REQUIRED", "User is not enrolled in this course");
       }
 
-      const html = await launchService.createCourseLaunchForm({ course, enrollment, user });
+      const html = await launchService.createCourseLaunchForm({ course, enrollment: enrollmentBlocksLaunch ? undefined : enrollment, user });
       res.setHeader("content-type", "text/html; charset=utf-8");
       res.status(200).send(html);
     } catch (error) {
