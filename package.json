@@ -7,6 +7,11 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "db:ensure": "tsx src/db/ensureMongo.ts",
+    "db:seed": "tsx src/db/seedLms.ts",
+    "local:infra:start": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local-infra.ps1",
+    "local:keycloak:bootstrap": "node ./scripts/bootstrap-keycloak.mjs",
+    "local:data:reset": "powershell -ExecutionPolicy Bypass -File ./scripts/reset-local-data.ps1",
+    "local:infra:teardown": "powershell -ExecutionPolicy Bypass -File ./scripts/teardown-local-infra.ps1",
     "start": "node dist/server.js",
     "test": "vitest run",
     "lint": "tsc -p tsconfig.json --noEmit"

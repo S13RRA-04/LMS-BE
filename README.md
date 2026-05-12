@@ -94,6 +94,8 @@ Copy `.env.example` and provide real values:
 - `LTI_TOOLS_JSON`: JSON array of registered tool records.
 - `CORS_ORIGINS`: comma-separated frontend origins.
 
+For Cloudflare-backed staging, see `docs/cloudflare-staging.md`. The API remains a Node/Express service and should be hosted on a Node-capable staging host or exposed through a Cloudflare Tunnel, not deployed directly to Pages.
+
 Example tool registration:
 
 ```json
