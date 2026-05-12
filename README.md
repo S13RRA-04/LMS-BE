@@ -6,7 +6,7 @@ The LMS product model follows a mature enterprise LMS pattern similar to Absorb 
 
 ## MongoDB
 
-The API uses the `CETU` Mongo database by default. In development and test, collection names are prefixed with `staging_` unless `MONGO_COLLECTION_PREFIX` is explicitly set.
+The API uses the `PACT_V4` Mongo database by default. In development and test, collection names are prefixed with `staging_` unless `MONGO_COLLECTION_PREFIX` is explicitly set.
 
 Current LMS collections:
 

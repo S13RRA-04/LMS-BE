@@ -49,7 +49,7 @@ Development requests use `x-dev-user-*` headers only while Auth0 middleware is n
 
 ## Next Production Step
 
-MongoDB is now the runtime repository for portal settings, departments, courses, enrollments, internal users, and audit logs. The API creates the required staging collections and indexes in the `CETU` database with the `staging_` prefix in development and test.
+MongoDB is now the runtime repository for portal settings, departments, courses, enrollments, internal users, and audit logs. The API creates the required staging collections and indexes in the `PACT_V4` database with the `staging_` prefix in development and test.
 
 Keycloak bearer tokens are verified at the backend boundary, normalized into CETU LMS roles, and linked to internal user records by Keycloak `sub`. Admin write operations record audit entries after successful mutation.
 

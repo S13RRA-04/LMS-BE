@@ -51,3 +51,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Smoke test staging LTI integration
+        run: npm run staging:smoke:lti
+        env:
+          LTI_PLATFORM_KID: ${{ secrets.LTI_PLATFORM_KID }}
+          LTI_PLATFORM_PRIVATE_KEY_PEM: ${{ secrets.LTI_PLATFORM_PRIVATE_KEY_PEM }}
