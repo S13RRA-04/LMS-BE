@@ -1,22 +1,27 @@
 import { AppError } from "../../errors/AppError.js";
 import { LTI_SCOPES } from "../ltiConstants.js";
 import type { LineItem, Score } from "../ltiTypes.js";
-import type { LineItemRepository } from "../repositories/lineItemRepository.js";
+
+type LineItemStore = {
+  list(): Promise<LineItem[]> | LineItem[];
+  create(input: Pick<LineItem, "label" | "scoreMaximum" | "resourceId" | "tag">): Promise<LineItem> | LineItem;
+  addScore(lineItemId: string, score: Score): Promise<Score> | Score;
+};
 
 export class AgsService {
-  constructor(private readonly lineItems: LineItemRepository) {}
+  constructor(private readonly lineItems: LineItemStore) {}
 
-  listLineItems(scopes: string[]) {
+  async listLineItems(scopes: string[]) {
     requireAnyScope(scopes, [LTI_SCOPES.lineItem, LTI_SCOPES.lineItemReadonly]);
     return this.lineItems.list();
   }
 
-  createLineItem(scopes: string[], input: Pick<LineItem, "label" | "scoreMaximum" | "resourceId" | "tag">) {
+  async createLineItem(scopes: string[], input: Pick<LineItem, "label" | "scoreMaximum" | "resourceId" | "tag">) {
     requireAnyScope(scopes, [LTI_SCOPES.lineItem]);
     return this.lineItems.create(input);
   }
 
-  submitScore(scopes: string[], lineItemId: string, input: Score) {
+  async submitScore(scopes: string[], lineItemId: string, input: Score) {
     requireAnyScope(scopes, [LTI_SCOPES.score]);
     return this.lineItems.addScore(lineItemId, input);
   }

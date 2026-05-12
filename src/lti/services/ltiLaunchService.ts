@@ -117,6 +117,60 @@ export class LtiLaunchService {
 
     return renderFormPost(redirectUri, { id_token: idToken });
   }
+
+  async createDeepLinkingLaunchForm(input: { course: Course; user: CurrentUser; cohortId?: string }) {
+    if (input.course.type !== "lti_tool" || !input.course.ltiToolClientId) {
+      throw new AppError(400, "COURSE_NOT_LTI_TOOL", "Course does not have an LTI tool configured for Deep Linking");
+    }
+
+    const tool = this.tools.requireByClientId(input.course.ltiToolClientId);
+    const deploymentId = tool.deploymentIds[0];
+    const redirectUri = tool.deepLinkRedirectUris[0] ?? tool.redirectUris[0];
+
+    if (!deploymentId || !redirectUri) {
+      throw new AppError(400, "LTI_TOOL_MISCONFIGURED", "LTI tool is missing deployment or redirect configuration");
+    }
+
+    const contextId = input.cohortId ?? input.course.id;
+    const idToken = await this.keys.signJwt(
+      {
+        sub: input.user.id,
+        nonce: crypto.randomUUID(),
+        name: input.user.name,
+        email: input.user.email,
+        [LTI_CLAIMS.messageType]: "LtiDeepLinkingRequest",
+        [LTI_CLAIMS.version]: "1.3.0",
+        [LTI_CLAIMS.deploymentId]: deploymentId,
+        [LTI_CLAIMS.targetLinkUri]: tool.targetLinkUri,
+        [LTI_CLAIMS.roles]: [ltiRoleFor(input.user.role)],
+        [LTI_CLAIMS.context]: { id: contextId, title: input.course.title },
+        [LTI_CLAIMS.lis]: { person_sourcedid: input.user.id },
+        [LTI_CLAIMS.deepLinkingSettings]: {
+          deep_link_return_url: `${this.config.appBaseUrl}/api/v1/lti/deep-linking/return`,
+          accept_types: ["ltiResourceLink"],
+          accept_presentation_document_targets: ["iframe", "window"],
+          accept_multiple: true,
+          auto_create: false,
+          data: JSON.stringify({
+            courseId: input.course.id,
+            cohortId: contextId,
+            requestedBy: input.user.id
+          })
+        },
+        [LTI_CLAIMS.agsEndpoint]: {
+          scope: [LTI_SCOPES.lineItem, LTI_SCOPES.lineItemReadonly, LTI_SCOPES.resultReadonly, LTI_SCOPES.score],
+          lineitems: `${this.config.appBaseUrl}/api/v1/lti/ags/lineitems`
+        },
+        [LTI_CLAIMS.custom]: {
+          course_id: input.course.id,
+          cohort_id: contextId
+        }
+      },
+      tool.clientId
+    );
+
+    return renderFormPost(redirectUri, { id_token: idToken });
+  }
 }
 
 function ltiRoleFor(role: CurrentUser["role"]) {

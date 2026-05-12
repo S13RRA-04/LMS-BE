@@ -10,6 +10,7 @@
     "db:seed": "tsx src/db/seedLms.ts",
     "cloudflare:whoami": "wrangler whoami",
     "cloudflare:secrets:staging": "powershell -ExecutionPolicy Bypass -File ./scripts/set-cloudflare-worker-secrets.ps1",
+    "staging:pact-tool": "powershell -ExecutionPolicy Bypass -File ./scripts/configure-pact-tool-staging.ps1",
     "deploy:staging": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-staging-node.ps1",
     "deploy:worker:legacy": "wrangler deploy",
     "local:infra:start": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local-infra.ps1",

@@ -10,6 +10,9 @@ export type MongoCollections = {
   enrollments: string;
   users: string;
   auditLogs: string;
+  ltiContentItems: string;
+  ltiLineItems: string;
+  ltiScores: string;
 };
 
 export function collectionNames(config: AppConfig): MongoCollections {
@@ -20,7 +23,10 @@ export function collectionNames(config: AppConfig): MongoCollections {
     courses: `${prefix}courses`,
     enrollments: `${prefix}enrollments`,
     users: `${prefix}users`,
-    auditLogs: `${prefix}audit_logs`
+    auditLogs: `${prefix}audit_logs`,
+    ltiContentItems: `${prefix}lti_content_items`,
+    ltiLineItems: `${prefix}lti_line_items`,
+    ltiScores: `${prefix}lti_scores`
   };
 }
 
@@ -68,4 +74,10 @@ export async function ensureMongoCollections(config: AppConfig) {
   await db.collection(names.auditLogs).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.auditLogs).createIndex({ actorUserId: 1, occurredAt: -1 });
   await db.collection(names.auditLogs).createIndex({ action: 1, occurredAt: -1 });
+  await db.collection(names.ltiContentItems).createIndex({ id: 1 }, { unique: true });
+  await db.collection(names.ltiContentItems).createIndex({ toolClientId: 1, resourceId: 1 }, { unique: true, sparse: true });
+  await db.collection(names.ltiContentItems).createIndex({ courseId: 1, cohortId: 1 });
+  await db.collection(names.ltiLineItems).createIndex({ id: 1 }, { unique: true });
+  await db.collection(names.ltiLineItems).createIndex({ resourceId: 1, tag: 1 });
+  await db.collection(names.ltiScores).createIndex({ lineItemId: 1, userId: 1 });
 }

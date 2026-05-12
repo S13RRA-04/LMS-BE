@@ -3,6 +3,7 @@ import { z } from "zod";
 const courseTypeSchema = z.enum(["online", "instructor_led", "curriculum", "bundle", "lti_tool"]);
 const courseStatusSchema = z.enum(["draft", "published", "archived"]);
 const enrollmentStatusSchema = z.enum(["not_started", "in_progress", "completed", "failed", "expired"]);
+const lmsRoleSchema = z.enum(["learner", "instructor", "admin"]);
 
 export const courseCreateSchema = z.object({
   id: z.string().min(1).max(120),
@@ -68,3 +69,21 @@ export const portalUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "At least one portal field is required" });
+
+export const adminUserCreateSchema = z.object({
+  username: z.string().min(3).max(120).regex(/^[a-zA-Z0-9._@-]+$/),
+  email: z.string().email().max(255),
+  name: z.string().min(1).max(255).optional(),
+  role: lmsRoleSchema,
+  departmentId: z.string().min(1).max(120).optional(),
+  enabled: z.boolean().default(true),
+  temporaryPassword: z.string().min(12).max(256).optional()
+}).strict();
+
+export const adminUserUpdateSchema = adminUserCreateSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one user field is required" });
+
+export const deepLinkLaunchSchema = z.object({
+  cohortId: z.string().min(1).max(120).optional()
+}).strict();

@@ -35,6 +35,15 @@ Required Keycloak config:
 - `KEYCLOAK_AUDIENCE`
 - `KEYCLOAK_JWKS_URI`
 
+Admin user management uses the Keycloak Admin API from the backend only. Configure a least-privilege service account or admin client with realm user-management and client role-mapping permissions:
+
+- `KEYCLOAK_ADMIN_BASE_URL`, defaults to the issuer origin
+- `KEYCLOAK_ADMIN_REALM`, defaults to the issuer realm
+- `KEYCLOAK_ADMIN_TOKEN_REALM`, defaults to `KEYCLOAK_ADMIN_REALM`
+- `KEYCLOAK_ADMIN_CLIENT_ID`
+- `KEYCLOAK_ADMIN_CLIENT_SECRET` for client-credentials auth, or `KEYCLOAK_ADMIN_USERNAME` and `KEYCLOAK_ADMIN_PASSWORD` for password auth
+- `KEYCLOAK_WEBHOOK_SECRET`, a shared secret sent by Keycloak event hooks in `x-keycloak-webhook-secret`
+
 Role normalization maps Keycloak realm roles, client roles, and group names into one effective LMS role:
 
 - `learner` or `lms_learner`
@@ -49,6 +58,8 @@ authorization code.
 Development headers are still available outside production when no bearer token is sent. Production requires a valid Keycloak bearer token.
 
 On successful Keycloak verification, the API upserts an internal LMS user record linked by `keycloakSub`. Route authorization and audit logs use the internal user ID so future profile, enrollment, and reporting data are not coupled directly to raw identity-provider payloads.
+
+Keycloak remains the source of truth for user identity. External Keycloak user changes should call `POST /api/v1/keycloak/events` with a Keycloak admin/user event payload containing either `userId`, `keycloakSub`, or `resourcePath: "users/{id}"`. The API authenticates the event with `x-keycloak-webhook-secret`, fetches the current user from Keycloak Admin API, and upserts Mongo. Delete events soft-delete the Mongo projection to preserve enrollment and audit references.
 
 ## Implemented LMS endpoints
 
@@ -73,6 +84,10 @@ These headers are disabled in production until Auth0 middleware is wired.
 - `GET /api/v1/lms/admin/departments`
 - `POST /api/v1/lms/admin/departments`
 - `PATCH /api/v1/lms/admin/departments/:departmentId`
+- `GET /api/v1/lms/admin/users`
+- `POST /api/v1/lms/admin/users`
+- `PATCH /api/v1/lms/admin/users/:userId`
+- `DELETE /api/v1/lms/admin/users/:userId`
 - `GET /api/v1/lms/admin/enrollments`
 - `POST /api/v1/lms/admin/enrollments`
 - `PATCH /api/v1/lms/admin/enrollments/:enrollmentId`
@@ -125,6 +140,7 @@ Example tool registration:
     "name": "PACT",
     "deploymentIds": ["pact-course-deployment"],
     "redirectUris": ["https://pact.example.com/lti/launch"],
+    "deepLinkRedirectUris": ["https://pact.example.com/lti/deep-link"],
     "targetLinkUri": "https://pact.example.com/lti/launch",
     "publicJwks": { "keys": [] },
     "scopes": [
@@ -141,4 +157,6 @@ Example tool registration:
 
 Routes validate request shapes and delegate to services. LTI tool registration, launch context, and line item storage are currently repository classes so MongoDB-backed implementations can replace the in-memory bootstrap without changing controllers.
 
-Before production, replace in-memory repositories with MongoDB repositories, connect launch authorization to the authenticated LMS user/session, and persist Deep Linking selections as course content records.
+Use `npm run staging:pact-tool -- -PactApiBaseUrl https://<pact-api-origin>` to refresh staging `LTI_TOOLS_JSON` with PACT launch URL, Deep Linking URL, and the public JWKS from PACT.
+
+Before production, connect launch authorization to the authenticated LMS user/session and expand accepted Deep Linking records into the final course authoring workflow.

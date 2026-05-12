@@ -1,5 +1,6 @@
 import { LTI_CLAIMS } from "../ltiConstants.js";
 import type { DeepLinkContentItem } from "../ltiTypes.js";
+import type { MongoLineItemRepository } from "../repositories/mongoLineItemRepository.js";
 import type { ToolRegistrationRepository } from "../repositories/toolRegistrationRepository.js";
 import type { ToolAssertionService } from "./toolAssertionService.js";
 import type { AppConfig } from "../../config/config.js";
@@ -9,7 +10,8 @@ export class DeepLinkingService {
   constructor(
     private readonly config: AppConfig,
     private readonly tools: ToolRegistrationRepository,
-    private readonly assertions: ToolAssertionService
+    private readonly assertions: ToolAssertionService,
+    private readonly lineItems: MongoLineItemRepository
   ) {}
 
   async acceptDeepLinkResponse(idToken: string) {
@@ -30,10 +32,37 @@ export class DeepLinkingService {
       throw new AppError(400, "INVALID_DEEP_LINK_ITEMS", "Deep Linking response did not include content items");
     }
 
+    const context = parseDeepLinkData(payload.data);
+    const accepted = await Promise.all(
+      (items as DeepLinkContentItem[]).map(async (item) => {
+        const lineItem = await this.lineItems.upsertFromDeepLink(item);
+        return this.lineItems.saveDeepLinkedContent({
+          toolClientId: tool.clientId,
+          item,
+          lineItem,
+          courseId: context.courseId,
+          cohortId: context.cohortId
+        });
+      })
+    );
+
+    return { accepted, count: accepted.length };
+  }
+}
+
+function parseDeepLinkData(value: unknown) {
+  if (typeof value !== "string") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { courseId?: unknown; cohortId?: unknown };
     return {
-      accepted: items as DeepLinkContentItem[],
-      count: items.length
+      courseId: typeof parsed.courseId === "string" ? parsed.courseId : undefined,
+      cohortId: typeof parsed.cohortId === "string" ? parsed.cohortId : undefined
     };
+  } catch {
+    return {};
   }
 }
 

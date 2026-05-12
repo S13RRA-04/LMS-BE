@@ -8,8 +8,9 @@ import { LtiTokenService } from "../lti/services/ltiTokenService.js";
 import { PlatformKeyService } from "../lti/services/platformKeyService.js";
 import { ToolAssertionService } from "../lti/services/toolAssertionService.js";
 import { LaunchContextRepository } from "../lti/repositories/launchContextRepository.js";
-import { LineItemRepository } from "../lti/repositories/lineItemRepository.js";
+import { MongoLineItemRepository } from "../lti/repositories/mongoLineItemRepository.js";
 import { ToolRegistrationRepository } from "../lti/repositories/toolRegistrationRepository.js";
+import { getMongoDb } from "../db/mongo.js";
 import { ltiAccessToken } from "../lti/middleware/ltiAccessToken.js";
 import {
   authorizationQuerySchema,
@@ -24,13 +25,10 @@ export function createLtiRouter(config: AppConfig, _logger: AppLogger) {
   const router = Router();
   const toolRepo = new ToolRegistrationRepository(config.registeredTools);
   const contextRepo = new LaunchContextRepository();
-  const lineItemRepo = new LineItemRepository();
   const keyService = new PlatformKeyService(config);
   const assertionService = new ToolAssertionService();
   const launchService = new LtiLaunchService(config, toolRepo, contextRepo, keyService);
   const tokenService = new LtiTokenService(config, toolRepo, assertionService, keyService);
-  const agsService = new AgsService(lineItemRepo);
-  const deepLinkingService = new DeepLinkingService(config, toolRepo, assertionService);
 
   router.get("/jwks", async (_req, res, next) => {
     try {
@@ -61,32 +59,39 @@ export function createLtiRouter(config: AppConfig, _logger: AppLogger) {
   router.post("/deep-linking/return", async (req, res, next) => {
     try {
       const body = deepLinkReturnBodySchema.parse(req.body);
-      res.status(200).json(await deepLinkingService.acceptDeepLinkResponse(body.JWT ?? body.id_token ?? ""));
+      const lineItems = new MongoLineItemRepository(await getMongoDb(config), config);
+      res.status(200).json(await new DeepLinkingService(config, toolRepo, assertionService, lineItems).acceptDeepLinkResponse(body.JWT ?? body.id_token ?? ""));
     } catch (error) {
       next(error);
     }
   });
 
-  router.get("/ags/lineitems", ltiAccessToken(config), (req, res, next) => {
+  router.get("/ags/lineitems", ltiAccessToken(config), async (req, res, next) => {
     try {
-      res.status(200).json(agsService.listLineItems(requireScopes(req)));
+      const agsService = new AgsService(new MongoLineItemRepository(await getMongoDb(config), config));
+      res.status(200).json(await agsService.listLineItems(requireScopes(req)));
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/ags/lineitems", ltiAccessToken(config), (req, res, next) => {
+  router.post("/ags/lineitems", ltiAccessToken(config), async (req, res, next) => {
     try {
-      res.status(201).json(agsService.createLineItem(requireScopes(req), lineItemBodySchema.parse(req.body)));
+      const agsService = new AgsService(new MongoLineItemRepository(await getMongoDb(config), config));
+      res.status(201).json(await agsService.createLineItem(requireScopes(req), lineItemBodySchema.parse(req.body)));
     } catch (error) {
       next(error);
     }
   });
 
-  router.post("/ags/lineitems/:lineItemId/scores", ltiAccessToken(config), (req, res, next) => {
+  router.post("/ags/lineitems/:lineItemId/scores", ltiAccessToken(config), async (req, res, next) => {
     try {
       res.status(201).json(
-        agsService.submitScore(requireScopes(req), req.params.lineItemId, scoreBodySchema.parse(req.body))
+        await new AgsService(new MongoLineItemRepository(await getMongoDb(config), config)).submitScore(
+          requireScopes(req),
+          req.params.lineItemId,
+          scoreBodySchema.parse(req.body)
+        )
       );
     } catch (error) {
       next(error);

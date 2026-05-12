@@ -23,7 +23,9 @@ export function currentUser(config: AppConfig) {
           role: verified.role,
           roles: verified.roles,
           permissions: verified.permissions,
-          departmentId: verified.departmentId
+          departmentId: verified.departmentId,
+          enabled: true,
+          lastLoginAt: new Date().toISOString()
         });
         req.currentUser = {
           id: internalUser.id,

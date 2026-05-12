@@ -9,6 +9,7 @@ export type RegisteredTool = {
   name: string;
   deploymentIds: string[];
   redirectUris: string[];
+  deepLinkRedirectUris: string[];
   targetLinkUri: string;
   publicJwks?: Jwks;
   scopes: string[];
@@ -33,6 +34,22 @@ export type LineItem = {
   scoreMaximum: number;
   resourceId?: string;
   tag?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DeepLinkedContent = {
+  id: string;
+  toolClientId: string;
+  type: string;
+  title: string;
+  url?: string;
+  text?: string;
+  resourceId?: string;
+  tag?: string;
+  courseId?: string;
+  cohortId?: string;
+  lineItemId?: string;
   createdAt: string;
   updatedAt: string;
 };

@@ -5,7 +5,10 @@ export type AuditAction =
   | "department.update"
   | "enrollment.create"
   | "enrollment.update"
-  | "portal_settings.update";
+  | "portal_settings.update"
+  | "user.create"
+  | "user.update"
+  | "user.delete";
 
 export type AuditLog = {
   id: string;

@@ -7,6 +7,7 @@ export const LTI_CLAIMS = {
   roles: "https://purl.imsglobal.org/spec/lti/claim/roles",
   context: "https://purl.imsglobal.org/spec/lti/claim/context",
   lis: "https://purl.imsglobal.org/spec/lti/claim/lis",
+  custom: "https://purl.imsglobal.org/spec/lti/claim/custom",
   deepLinkingSettings: "https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings",
   contentItems: "https://purl.imsglobal.org/spec/lti-dl/claim/content_items",
   agsEndpoint: "https://purl.imsglobal.org/spec/lti-ags/claim/endpoint"

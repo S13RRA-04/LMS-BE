@@ -4,19 +4,19 @@ import { LineItemRepository } from "../src/lti/repositories/lineItemRepository.j
 import { LTI_SCOPES } from "../src/lti/ltiConstants.js";
 
 describe("AgsService", () => {
-  it("requires write scope to create line items", () => {
+  it("requires write scope to create line items", async () => {
     const service = new AgsService(new LineItemRepository());
 
-    expect(() => service.createLineItem([LTI_SCOPES.lineItemReadonly], { label: "PACT", scoreMaximum: 100 })).toThrow(
+    await expect(service.createLineItem([LTI_SCOPES.lineItemReadonly], { label: "PACT", scoreMaximum: 100 })).rejects.toThrow(
       "Access token does not include a required AGS scope"
     );
   });
 
-  it("creates and lists line items with the right scopes", () => {
+  it("creates and lists line items with the right scopes", async () => {
     const service = new AgsService(new LineItemRepository());
-    const created = service.createLineItem([LTI_SCOPES.lineItem], { label: "PACT", scoreMaximum: 100 });
+    const created = await service.createLineItem([LTI_SCOPES.lineItem], { label: "PACT", scoreMaximum: 100 });
 
     expect(created.id).toEqual(expect.any(String));
-    expect(service.listLineItems([LTI_SCOPES.lineItemReadonly])).toHaveLength(1);
+    await expect(service.listLineItems([LTI_SCOPES.lineItemReadonly])).resolves.toHaveLength(1);
   });
 });

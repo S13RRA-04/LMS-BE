@@ -13,6 +13,8 @@ describe("LMS API integration", () => {
   let jwksServer: http.Server;
   let jwksUrl: string;
   let privateKey: KeyLike;
+  let toolPrivateKey: KeyLike;
+  let toolPublicJwk: Record<string, unknown>;
   let config: AppConfig;
 
   beforeAll(async () => {
@@ -20,6 +22,9 @@ describe("LMS API integration", () => {
     const keys = await generateKeyPair("RS256");
     privateKey = keys.privateKey;
     const publicJwk = await exportJWK(keys.publicKey);
+    const toolKeys = await generateKeyPair("RS256");
+    toolPrivateKey = toolKeys.privateKey;
+    toolPublicJwk = await exportJWK(toolKeys.publicKey) as Record<string, unknown>;
     const jwks = { keys: [{ ...publicJwk, kid: "test-key", alg: "RS256", use: "sig" }] };
 
     jwksServer = http.createServer((_req, res) => {
@@ -33,7 +38,7 @@ describe("LMS API integration", () => {
     }
     jwksUrl = `http://127.0.0.1:${address.port}/certs`;
 
-    config = testConfig(mongo.getUri(), jwksUrl);
+    config = testConfig(mongo.getUri(), jwksUrl, toolPublicJwk);
     await ensureMongoCollections(config);
   });
 
@@ -128,9 +133,92 @@ describe("LMS API integration", () => {
     expect(launch.text).toContain("id_token");
     expect(launch.text).toContain("https://pact.example.test/lti/launch");
   });
+
+  it("allows admins to initiate PACT Deep Linking for an LTI course", async () => {
+    const app = createApp(config, createLogger(config));
+
+    await request(app)
+      .post("/api/v1/lms/admin/courses")
+      .set("x-dev-user-id", "admin-user")
+      .set("x-dev-user-roles", "admin")
+      .send({
+        id: "pact-deep-link",
+        slug: "pact-deep-link",
+        title: "PACT Deep Link",
+        description: "Practical cyber training course and tool launch.",
+        type: "lti_tool",
+        status: "published",
+        category: "Cyber Operations",
+        departmentIds: ["cyber-training"],
+        allowSelfEnrollment: false,
+        estimatedMinutes: 120,
+        ltiToolClientId: "pact-tool"
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .post("/api/v1/lms/admin/courses/pact-deep-link/deep-link")
+      .set("x-dev-user-id", "admin-user")
+      .set("x-dev-user-roles", "admin")
+      .send({ cohortId: "cohort-alpha" })
+      .expect(200);
+
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.text).toContain("id_token");
+    expect(response.text).toContain("https://pact.example.test/lti/deep-link");
+
+    await request(app)
+      .post("/api/v1/lms/admin/courses/pact-deep-link/deep-link")
+      .set("x-dev-user-id", "learner-1")
+      .set("x-dev-user-roles", "learner")
+      .send({ cohortId: "cohort-alpha" })
+      .expect(403);
+  });
+
+  it("persists accepted PACT Deep Linking items as LMS content and line items", async () => {
+    const app = createApp(config, createLogger(config));
+    const jwt = await signDeepLinkResponse(toolPrivateKey, config);
+
+    const accepted = await request(app)
+      .post("/api/v1/lti/deep-linking/return")
+      .type("form")
+      .send({ JWT: jwt })
+      .expect(200);
+
+    expect(accepted.body.count).toBe(1);
+    expect(accepted.body.accepted[0]).toMatchObject({
+      toolClientId: "pact-tool",
+      title: "PACT Squad Challenges",
+      courseId: "pact",
+      cohortId: "cohort-alpha"
+    });
+
+    const deepLinks = await request(app)
+      .get("/api/v1/lms/admin/deep-links")
+      .set("x-dev-user-id", "admin-user")
+      .set("x-dev-user-roles", "admin")
+      .expect(200);
+
+    expect(deepLinks.body.contentItems).toHaveLength(1);
+    expect(deepLinks.body.lineItems[0]).toMatchObject({
+      label: "PACT Squad Challenges",
+      scoreMaximum: 100,
+      resourceId: "pact-challenge-hub",
+      tag: "challenge"
+    });
+  });
+
+  it("rejects unauthenticated Keycloak user sync events", async () => {
+    const app = createApp(config, createLogger(config));
+
+    await request(app)
+      .post("/api/v1/keycloak/events")
+      .send({ operationType: "UPDATE", resourcePath: "users/keycloak-user-1" })
+      .expect(401);
+  });
 });
 
-function testConfig(mongoUri: string, jwksUrl: string): AppConfig {
+function testConfig(mongoUri: string, jwksUrl: string, toolPublicJwk: Record<string, unknown>): AppConfig {
   return {
     env: "test",
     port: 0,
@@ -141,6 +229,10 @@ function testConfig(mongoUri: string, jwksUrl: string): AppConfig {
     keycloakIssuer: "http://keycloak.test/realms/cetu",
     keycloakAudience: "cetu-lms-api",
     keycloakJwksUri: jwksUrl,
+    keycloakAdminBaseUrl: "http://keycloak.test",
+    keycloakAdminRealm: "cetu",
+    keycloakAdminTokenRealm: "cetu",
+    keycloakWebhookSecret: "test-webhook-secret-with-enough-length",
     ltiIssuer: "http://localhost:4000",
     ltiPlatformKid: "test-platform-key",
     ltiPlatformPrivateKeyPem:
@@ -151,12 +243,42 @@ function testConfig(mongoUri: string, jwksUrl: string): AppConfig {
         name: "PACT",
         deploymentIds: ["pact-course-deployment"],
         redirectUris: ["https://pact.example.test/lti/launch"],
+        deepLinkRedirectUris: ["https://pact.example.test/lti/deep-link"],
         targetLinkUri: "https://pact.example.test/lti/launch",
+        publicJwks: { keys: [{ ...toolPublicJwk, kid: "pact-tool-key", alg: "RS256", use: "sig" }] },
         scopes: []
       }
     ],
     corsOrigins: []
   };
+}
+
+async function signDeepLinkResponse(privateKey: KeyLike, config: AppConfig) {
+  return new SignJWT({
+    "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiDeepLinkingResponse",
+    "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
+    "https://purl.imsglobal.org/spec/lti-dl/claim/content_items": [
+      {
+        type: "ltiResourceLink",
+        title: "PACT Squad Challenges",
+        url: "https://pact.example.test/launch/challenge",
+        lineItem: {
+          label: "PACT Squad Challenges",
+          scoreMaximum: 100,
+          resourceId: "pact-challenge-hub",
+          tag: "challenge"
+        }
+      }
+    ],
+    data: JSON.stringify({ courseId: "pact", cohortId: "cohort-alpha" })
+  })
+    .setProtectedHeader({ alg: "RS256", kid: "pact-tool-key" })
+    .setIssuer("pact-tool")
+    .setSubject("pact-tool")
+    .setAudience(`${config.appBaseUrl}/api/v1/lti/deep-linking/return`)
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(privateKey);
 }
 
 async function signKeycloakToken(privateKey: KeyLike, config: AppConfig) {
