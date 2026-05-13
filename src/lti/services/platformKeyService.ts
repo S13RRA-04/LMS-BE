@@ -1,4 +1,3 @@
-import { createPublicKey, type KeyObject } from "node:crypto";
 import { exportJWK, importPKCS8, SignJWT, type JWK, type JWTPayload, type KeyLike } from "jose";
 import type { AppConfig } from "../../config/config.js";
 
@@ -10,8 +9,7 @@ export class PlatformKeyService {
   }
 
   async jwks() {
-    const publicKey = createPublicKey((await this.privateKeyPromise) as KeyObject);
-    const jwk = publicRsaJwk(await exportJWK(publicKey));
+    const jwk = publicRsaJwk(await exportJWK(await this.privateKeyPromise));
     return { keys: [{ ...jwk, kid: this.config.ltiPlatformKid, alg: "RS256", use: "sig" }] };
   }
 

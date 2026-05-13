@@ -16,6 +16,9 @@ Current LMS collections:
 - `staging_enrollments`
 - `staging_users`
 - `staging_audit_logs`
+- `staging_lti_content_items`
+- `staging_lti_line_items`
+- `staging_lti_scores`
 
 Run this after configuring `.env` to create collections and indexes:
 
@@ -23,7 +26,7 @@ Run this after configuring `.env` to create collections and indexes:
 npm run db:ensure
 ```
 
-The same collection-creation check also runs at API startup.
+Run the collection/index check before deploying a new environment or after adding Mongo-backed features. The Worker runtime assumes required collections and indexes already exist.
 
 ## Keycloak OAuth
 
@@ -71,7 +74,7 @@ Development-only current user headers:
 - `x-dev-user-name`
 - `x-dev-department-id`
 
-These headers are disabled in production until Auth0 middleware is wired.
+These headers are disabled in production. Production requires a valid Keycloak bearer token.
 
 - `GET /api/v1/lms/learner/dashboard`
 - `GET /api/v1/lms/learner/catalog`
@@ -129,18 +132,62 @@ Copy `.env.example` and provide real values:
 - `LTI_TOOLS_JSON`: JSON array of registered tool records.
 - `CORS_ORIGINS`: comma-separated frontend origins.
 
-For Cloudflare-backed staging, see `docs/cloudflare-staging.md`. The API remains a Node/Express service and should be hosted on a Node-capable staging host or exposed through a Cloudflare Tunnel, not deployed directly to Pages.
+For Cloudflare-backed staging, see `docs/cloudflare-staging.md`. The public staging and production API entrypoints are deployed with Wrangler as Cloudflare Workers.
 
-## GitHub push deployments
+## Deployment paths
 
-Pushing to `master` or `main` runs `.github/workflows/deploy-staging.yml`. The workflow installs dependencies, builds, runs tests, validates the Worker bundle with `wrangler deploy --dry-run`, then deploys `cetu-lms-api-staging` to Cloudflare Workers.
+LMS backend is deployed as a Worker-native API. The Worker entrypoint reuses the service, repository, validation, Keycloak, LTI, audit-log, and Mongo-backed domain layers directly.
 
-Required GitHub repository or environment secrets:
+LMS backend has two Wrangler deployment paths:
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+| Target | Wrangler command | Runtime | Public API URL | Data prefix |
+| --- | --- | --- | --- | --- |
+| Staging | `npm run deploy:staging` | Cloudflare Worker API | `https://cetu-lms-api-staging.cetu.workers.dev` | `staging_` |
+| Production | `npm run deploy:production` | Cloudflare Worker API | `https://lms-api.cetu.online` | none |
+
+GitHub houses repository code only. Deployments are managed intentionally with Wrangler from an authenticated operator workstation or controlled deployment host. Production must be promoted intentionally after staging is verified and after production secrets, MongoDB, Keycloak, CORS, and PACT tool registration are configured.
+
+## Wrangler deployments
+
+Run build and tests before deploying:
+
+```bash
+npm run build
+npm test
+npm run deploy:staging
+```
+
+`npm run deploy:staging` deploys `wrangler.jsonc` environment `staging`. `npm run deploy:production` deploys environment `production`.
 
 Runtime secrets such as `MONGO_URI`, `KEYCLOAK_ISSUER`, `KEYCLOAK_JWKS_URI`, `LTI_PLATFORM_KID`, and `LTI_PLATFORM_PRIVATE_KEY_PEM` must also be present as Cloudflare Worker secrets before the deployed Worker can serve protected routes.
+
+Check which secret names exist:
+
+```bash
+npx wrangler secret list
+```
+
+Upload staging secrets from `.env.staging`:
+
+```bash
+npm run cloudflare:secrets:staging
+```
+
+Upload production secrets from `.env.production`:
+
+```bash
+npm run cloudflare:secrets:production
+```
+
+The secret upload script rejects localhost, `127.0.0.1`, and `example.com` values. For staging it requires staging Keycloak hosts; for production it rejects staging hosts.
+
+Generate a new LMS LTI signing key when rotating or creating an environment:
+
+```bash
+npm run lti:key:generate -- staging-platform-key
+```
+
+Copy the generated `LTI_PLATFORM_KID` and `LTI_PLATFORM_PRIVATE_KEY_PEM` lines into the target backend env file. The private key is emitted with escaped `\n` sequences because the backend converts them back to PEM newlines at runtime.
 
 Example tool registration:
 
@@ -166,7 +213,7 @@ Example tool registration:
 
 ## Architecture notes
 
-Routes validate request shapes and delegate to services. LTI tool registration, launch context, and line item storage are currently repository classes so MongoDB-backed implementations can replace the in-memory bootstrap without changing controllers.
+Worker routes validate request shapes and delegate to services. LMS records, audit logs, LTI content items, line items, and AGS scores use Mongo-backed repositories.
 
 Use `npm run staging:pact-tool -- -PactApiBaseUrl https://<pact-api-origin>` to refresh staging `LTI_TOOLS_JSON` with PACT launch URL, Deep Linking URL, and the public JWKS from PACT.
 

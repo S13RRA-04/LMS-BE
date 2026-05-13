@@ -1,5 +1,7 @@
 param(
-  [string]$EnvFile = ".env"
+  [ValidateSet("staging", "production")]
+  [string]$Target = "staging",
+  [string]$EnvFile
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,11 +37,19 @@ function Invoke-CheckedCommand([string]$Command, [string[]]$Arguments, [string]$
   }
 }
 
+if ([string]::IsNullOrWhiteSpace($EnvFile)) {
+  $EnvFile = ".env.$Target"
+}
+
 if (-not (Test-Path $EnvFile)) {
   throw "Missing $EnvFile."
 }
 
 $values = Read-DotEnvFile $EnvFile
+$urlNames = @(
+  "KEYCLOAK_ISSUER",
+  "KEYCLOAK_JWKS_URI"
+)
 $secretNames = @(
   "MONGO_URI",
   "KEYCLOAK_ISSUER",
@@ -53,5 +63,23 @@ foreach ($name in $secretNames) {
     throw "$name is required in $EnvFile."
   }
 
-  Invoke-CheckedCommand "npx" @("wrangler", "secret", "put", $name) $values[$name]
+  if ($values[$name] -match "localhost|127\.0\.0\.1|example\.com") {
+    throw "$name in $EnvFile points at a local or placeholder value and cannot be uploaded as a Cloudflare Worker secret."
+  }
+}
+
+foreach ($name in $urlNames) {
+  if ($values[$name] -notmatch "^https://") {
+    throw "$name in $EnvFile must be an HTTPS URL."
+  }
+  if ($Target -eq "staging" -and $values[$name] -notmatch "staging") {
+    throw "$name in $EnvFile must point at a clearly named staging host."
+  }
+  if ($Target -eq "production" -and $values[$name] -match "staging") {
+    throw "$name in $EnvFile points at staging and cannot be uploaded as a production Worker secret."
+  }
+}
+
+foreach ($name in $secretNames) {
+  Invoke-CheckedCommand "npx" @("wrangler", "secret", "put", $name, "--env", $Target) $values[$name]
 }

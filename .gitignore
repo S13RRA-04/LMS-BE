@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.staging
+.env.production
 secrets/
 *.log
 tests/**/*.js

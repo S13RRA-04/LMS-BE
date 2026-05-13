@@ -1,20 +1,19 @@
 import http from "node:http";
-import { generateKeyPair, exportJWK, SignJWT, type KeyLike } from "jose";
+import { exportJWK, generateKeyPair, SignJWT, type KeyLike } from "jose";
 import { MongoMemoryServer } from "mongodb-memory-server";
-import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "../src/app.js";
-import type { AppConfig } from "../src/config/config.js";
+import worker from "../src/worker.js";
+import { loadConfig, type AppConfig } from "../src/config/config.js";
 import { closeMongoClient, collectionNames, ensureMongoCollections, getMongoDb } from "../src/db/mongo.js";
-import { createLogger } from "../src/logging/logger.js";
 
-describe("LMS API integration", () => {
+describe("LMS Worker API integration", () => {
   let mongo: MongoMemoryServer;
   let jwksServer: http.Server;
   let jwksUrl: string;
   let privateKey: KeyLike;
   let toolPrivateKey: KeyLike;
   let toolPublicJwk: Record<string, unknown>;
+  let env: Record<string, string>;
   let config: AppConfig;
 
   beforeAll(async () => {
@@ -24,7 +23,7 @@ describe("LMS API integration", () => {
     const publicJwk = await exportJWK(keys.publicKey);
     const toolKeys = await generateKeyPair("RS256");
     toolPrivateKey = toolKeys.privateKey;
-    toolPublicJwk = await exportJWK(toolKeys.publicKey) as Record<string, unknown>;
+    toolPublicJwk = (await exportJWK(toolKeys.publicKey)) as Record<string, unknown>;
     const jwks = { keys: [{ ...publicJwk, kid: "test-key", alg: "RS256", use: "sig" }] };
 
     jwksServer = http.createServer((_req, res) => {
@@ -38,7 +37,8 @@ describe("LMS API integration", () => {
     }
     jwksUrl = `http://127.0.0.1:${address.port}/certs`;
 
-    config = testConfig(mongo.getUri(), jwksUrl, toolPublicJwk);
+    env = testEnv(mongo.getUri(), jwksUrl, toolPublicJwk);
+    config = loadConfig(env);
     await ensureMongoCollections(config);
   });
 
@@ -50,13 +50,13 @@ describe("LMS API integration", () => {
 
   it("upserts the internal user from Keycloak subject and writes audit log for admin course creation", async () => {
     const token = await signKeycloakToken(privateKey, config);
-    const app = createApp(config, createLogger(config));
 
-    const response = await request(app)
-      .post("/api/v1/lms/admin/courses")
-      .set("authorization", `Bearer ${token}`)
-      .set("x-request-id", "integration-request")
-      .send({
+    const response = await api("POST", "/api/v1/lms/admin/courses", {
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-request-id": "integration-request"
+      },
+      body: {
         id: "malware-analysis",
         slug: "malware-analysis",
         title: "Malware Analysis",
@@ -67,10 +67,11 @@ describe("LMS API integration", () => {
         departmentIds: ["cyber-training"],
         allowSelfEnrollment: true,
         estimatedMinutes: 90
-      });
+      }
+    });
 
     expect(response.status).toBe(201);
-    expect(response.body.id).toBe("malware-analysis");
+    await expect(response.json()).resolves.toMatchObject({ id: "malware-analysis" });
 
     const db = await getMongoDb(config);
     const names = collectionNames(config);
@@ -87,13 +88,9 @@ describe("LMS API integration", () => {
   });
 
   it("allows enrolled learners to launch an LTI course with cohort context", async () => {
-    const app = createApp(config, createLogger(config));
-
-    await request(app)
-      .post("/api/v1/lms/admin/courses")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .send({
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
         id: "pact",
         slug: "pact",
         title: "PACT",
@@ -105,43 +102,40 @@ describe("LMS API integration", () => {
         allowSelfEnrollment: false,
         estimatedMinutes: 120,
         ltiToolClientId: "pact-tool"
-      })
-      .expect(201);
+      }
+    }).then((response) => expect(response.status).toBe(201));
 
-    await request(app)
-      .post("/api/v1/lms/admin/enrollments")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .send({
+    await api("POST", "/api/v1/lms/admin/enrollments", {
+      headers: devAdminHeaders(),
+      body: {
         userId: "learner-1",
         courseId: "pact",
         cohortId: "cohort-alpha",
         status: "in_progress",
         progressPercent: 0
-      })
-      .expect(201);
+      }
+    }).then((response) => expect(response.status).toBe(201));
 
-    const launch = await request(app)
-      .post("/api/v1/lms/courses/pact/launch")
-      .set("x-dev-user-id", "learner-1")
-      .set("x-dev-user-roles", "learner")
-      .set("x-dev-user-email", "learner@example.test")
-      .set("x-dev-user-name", "Learner One")
-      .expect(200);
+    const launch = await api("POST", "/api/v1/lms/courses/pact/launch", {
+      headers: {
+        "x-dev-user-id": "learner-1",
+        "x-dev-user-roles": "learner",
+        "x-dev-user-email": "learner@example.test",
+        "x-dev-user-name": "Learner One"
+      }
+    });
 
-    expect(launch.headers["content-type"]).toContain("text/html");
-    expect(launch.text).toContain("id_token");
-    expect(launch.text).toContain("https://pact.example.test/lti/launch");
+    expect(launch.status).toBe(200);
+    expect(launch.headers.get("content-type")).toContain("text/html");
+    const text = await launch.text();
+    expect(text).toContain("id_token");
+    expect(text).toContain("https://pact.example.test/lti/launch");
   });
 
   it("allows admins to launch an LTI course without enrollment", async () => {
-    const app = createApp(config, createLogger(config));
-
-    await request(app)
-      .post("/api/v1/lms/admin/courses")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .send({
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
         id: "pact-admin-open",
         slug: "pact-admin-open",
         title: "PACT Admin Open",
@@ -153,36 +147,30 @@ describe("LMS API integration", () => {
         allowSelfEnrollment: false,
         estimatedMinutes: 120,
         ltiToolClientId: "pact-tool"
-      })
-      .expect(201);
+      }
+    }).then((response) => expect(response.status).toBe(201));
 
-    await request(app)
-      .post("/api/v1/lms/courses/pact-admin-open/launch")
-      .set("x-dev-user-id", "learner-without-enrollment")
-      .set("x-dev-user-roles", "learner")
-      .expect(403);
+    await api("POST", "/api/v1/lms/courses/pact-admin-open/launch", {
+      headers: { "x-dev-user-id": "learner-without-enrollment", "x-dev-user-roles": "learner" }
+    }).then((response) => expect(response.status).toBe(403));
 
-    const launch = await request(app)
-      .post("/api/v1/lms/courses/pact-admin-open/launch")
-      .set("x-dev-user-id", "admin-without-enrollment")
-      .set("x-dev-user-roles", "admin")
-      .set("x-dev-user-email", "admin-open@example.test")
-      .set("x-dev-user-name", "Admin Open")
-      .expect(200);
+    const launch = await api("POST", "/api/v1/lms/courses/pact-admin-open/launch", {
+      headers: {
+        "x-dev-user-id": "admin-without-enrollment",
+        "x-dev-user-roles": "admin",
+        "x-dev-user-email": "admin-open@example.test",
+        "x-dev-user-name": "Admin Open"
+      }
+    });
 
-    expect(launch.headers["content-type"]).toContain("text/html");
-    expect(launch.text).toContain("id_token");
-    expect(launch.text).toContain("https://pact.example.test/lti/launch");
+    expect(launch.status).toBe(200);
+    await expect(launch.text()).resolves.toContain("https://pact.example.test/lti/launch");
   });
 
   it("allows admins to initiate PACT Deep Linking for an LTI course", async () => {
-    const app = createApp(config, createLogger(config));
-
-    await request(app)
-      .post("/api/v1/lms/admin/courses")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .send({
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
         id: "pact-deep-link",
         slug: "pact-deep-link",
         title: "PACT Deep Link",
@@ -194,54 +182,54 @@ describe("LMS API integration", () => {
         allowSelfEnrollment: false,
         estimatedMinutes: 120,
         ltiToolClientId: "pact-tool"
-      })
-      .expect(201);
+      }
+    }).then((response) => expect(response.status).toBe(201));
 
-    const response = await request(app)
-      .post("/api/v1/lms/admin/courses/pact-deep-link/deep-link")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .send({ cohortId: "cohort-alpha" })
-      .expect(200);
+    const response = await api("POST", "/api/v1/lms/admin/courses/pact-deep-link/deep-link", {
+      headers: devAdminHeaders(),
+      body: { cohortId: "cohort-alpha" }
+    });
 
-    expect(response.headers["content-type"]).toContain("text/html");
-    expect(response.text).toContain("id_token");
-    expect(response.text).toContain("https://pact.example.test/lti/deep-link");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const text = await response.text();
+    expect(text).toContain("id_token");
+    expect(text).toContain("https://pact.example.test/lti/deep-link");
 
-    await request(app)
-      .post("/api/v1/lms/admin/courses/pact-deep-link/deep-link")
-      .set("x-dev-user-id", "learner-1")
-      .set("x-dev-user-roles", "learner")
-      .send({ cohortId: "cohort-alpha" })
-      .expect(403);
+    await api("POST", "/api/v1/lms/admin/courses/pact-deep-link/deep-link", {
+      headers: { "x-dev-user-id": "learner-1", "x-dev-user-roles": "learner" },
+      body: { cohortId: "cohort-alpha" }
+    }).then((learnerResponse) => expect(learnerResponse.status).toBe(403));
   });
 
   it("persists accepted PACT Deep Linking items as LMS content and line items", async () => {
-    const app = createApp(config, createLogger(config));
     const jwt = await signDeepLinkResponse(toolPrivateKey, config);
 
-    const accepted = await request(app)
-      .post("/api/v1/lti/deep-linking/return")
-      .type("form")
-      .send({ JWT: jwt })
-      .expect(200);
-
-    expect(accepted.body.count).toBe(1);
-    expect(accepted.body.accepted[0]).toMatchObject({
-      toolClientId: "pact-tool",
-      title: "PACT Squad Challenges",
-      courseId: "pact",
-      cohortId: "cohort-alpha"
+    const accepted = await api("POST", "/api/v1/lti/deep-linking/return", {
+      form: { JWT: jwt }
     });
 
-    const deepLinks = await request(app)
-      .get("/api/v1/lms/admin/deep-links")
-      .set("x-dev-user-id", "admin-user")
-      .set("x-dev-user-roles", "admin")
-      .expect(200);
+    expect(accepted.status).toBe(200);
+    await expect(accepted.json()).resolves.toMatchObject({
+      count: 1,
+      accepted: [
+        {
+          toolClientId: "pact-tool",
+          title: "PACT Squad Challenges",
+          courseId: "pact",
+          cohortId: "cohort-alpha"
+        }
+      ]
+    });
 
-    expect(deepLinks.body.contentItems).toHaveLength(1);
-    expect(deepLinks.body.lineItems[0]).toMatchObject({
+    const deepLinks = await api("GET", "/api/v1/lms/admin/deep-links", {
+      headers: devAdminHeaders()
+    });
+
+    expect(deepLinks.status).toBe(200);
+    const body = await deepLinks.json() as { contentItems: unknown[]; lineItems: Array<{ label: string; scoreMaximum: number; resourceId: string; tag: string }> };
+    expect(body.contentItems).toHaveLength(1);
+    expect(body.lineItems[0]).toMatchObject({
       label: "PACT Squad Challenges",
       scoreMaximum: 100,
       resourceId: "pact-challenge-hub",
@@ -250,35 +238,53 @@ describe("LMS API integration", () => {
   });
 
   it("rejects unauthenticated Keycloak user sync events", async () => {
-    const app = createApp(config, createLogger(config));
+    const response = await api("POST", "/api/v1/keycloak/events", {
+      body: { operationType: "UPDATE", resourcePath: "users/keycloak-user-1" }
+    });
 
-    await request(app)
-      .post("/api/v1/keycloak/events")
-      .send({ operationType: "UPDATE", resourcePath: "users/keycloak-user-1" })
-      .expect(401);
+    expect(response.status).toBe(401);
   });
+
+  async function api(method: string, path: string, options: { headers?: Record<string, string>; body?: unknown; form?: Record<string, string> } = {}) {
+    const headers = new Headers(options.headers);
+    let body: BodyInit | undefined;
+
+    if (options.form) {
+      headers.set("content-type", "application/x-www-form-urlencoded");
+      body = new URLSearchParams(options.form);
+    } else if (options.body !== undefined) {
+      headers.set("content-type", "application/json");
+      body = JSON.stringify(options.body);
+    }
+
+    return worker.fetch(new Request(`https://lms.example.test${path}`, { method, headers, body }), env);
+  }
 });
 
-function testConfig(mongoUri: string, jwksUrl: string, toolPublicJwk: Record<string, unknown>): AppConfig {
+function devAdminHeaders() {
+  return { "x-dev-user-id": "admin-user", "x-dev-user-roles": "admin" };
+}
+
+function testEnv(mongoUri: string, jwksUrl: string, toolPublicJwk: Record<string, unknown>): Record<string, string> {
   return {
-    env: "test",
-    port: 0,
-    appBaseUrl: "http://localhost:4000",
-    mongoUri,
-    mongoDbName: "CETU",
-    mongoCollectionPrefix: "staging_test_",
-    keycloakIssuer: "http://keycloak.test/realms/cetu",
-    keycloakAudience: "cetu-lms-api",
-    keycloakJwksUri: jwksUrl,
-    keycloakAdminBaseUrl: "http://keycloak.test",
-    keycloakAdminRealm: "cetu",
-    keycloakAdminTokenRealm: "cetu",
-    keycloakWebhookSecret: "test-webhook-secret-with-enough-length",
-    ltiIssuer: "http://localhost:4000",
-    ltiPlatformKid: "test-platform-key",
-    ltiPlatformPrivateKeyPem:
+    NODE_ENV: "test",
+    PORT: "1",
+    APP_BASE_URL: "http://localhost:4000",
+    MONGO_URI: mongoUri,
+    MONGO_DB_NAME: "CETU",
+    MONGO_COLLECTION_PREFIX: "staging_test_",
+    KEYCLOAK_ISSUER: "http://keycloak.test/realms/cetu",
+    KEYCLOAK_AUDIENCE: "cetu-lms-api",
+    KEYCLOAK_JWKS_URI: jwksUrl,
+    KEYCLOAK_ADMIN_BASE_URL: "http://keycloak.test",
+    KEYCLOAK_ADMIN_REALM: "cetu",
+    KEYCLOAK_ADMIN_TOKEN_REALM: "cetu",
+    KEYCLOAK_WEBHOOK_SECRET: "test-webhook-secret-with-enough-length",
+    LTI_ISSUER: "http://localhost:4000",
+    LTI_PLATFORM_KID: "test-platform-key",
+    LTI_PLATFORM_PRIVATE_KEY_PEM:
       "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDJo+4HVmM0MdQc\nuywa+88cPJUgftuMdbsXgoahtGu8gEbQu8RXObej+Vo1mnFmY5p0PCYb9zKusJq5\nLrrPfmzgcaIb85xrntCgu+eah1IV6gOLLYgQy2kbjiBplxohF3q8klMgG9Xr5XEG\nR6rlfAaP7cNI9e6fryUz2RXxAoVyFgQmjHnIrzXcUD1P9l82fCVmF5jhFWi3JQvq\nAAegJLQcW4NQ5ORv6Vr1kQSPj2EsgnDyhrYJ6zjVJNKERo0L4809oXhvFZLxsYY+\nRnNolI9BW54jWRY17es0/tUXvssGt0jIz/34WBLwKSlcfx40/jGZH0XM1mvUOZHP\nQKf7EGs1AgMBAAECggEACFRNbuujv5Evyx/ZAZPVO4+x5G6C1MG7n985GC51pYxG\nbRoBN4qS/t4/RqiV3SZeIuZQS8qx5Id+E+57yWSJbXrCCmJILjQiOiwrSki3HJjK\nxkw68CcV5I0g7k+o0F6XBhwSQ0a6cwKSAE+si4z6B8tvk1ChRf4lyPqxMZcy2Q7r\nvbMOo8gdUYF1FC2LEWVEgY9E0kFvaqAp4LLCwkt9gKEsC4Kb/BFaWmKHTQFPwLIE\nFPcfcmDB+owPndH/kWGnP3k2GxA8wub7NriBhbkJSyHw6VjvPzOkJmrFRV+vELs9\nOZzE41eCjcvVGhbHdDB85bIfiW6qInC9B2/V2Wf+IQKBgQDzC2Y3gvS0pTN9GeKR\nPpUKswRkTeWWi7mmNOxo+sc9Phk2qSL5UaDGpj9+dOmT9pBgrhpqS0cH4t10ExyL\nv0/CAf9+4RRz7uT2XzN46n6NNZVPYoITjpu7SXxHcIw4XsR71To5WwgeTN+noff7\n7ry6Ooa40ReAPblFm0WQxNC6pQKBgQDU8S2o9qRe1vFNVSXBkX17XBMBHYuq4w3x\npEyGYBy1fi1A99itRT9DrFuK64+veU5DDPf0sQOIQ+0nAHU/3OwUf9me3IzXnCWv\nVun2Ww9O3+QLSYPJP6MxDr8LTLj+9IEdIbW3Ku/Oui8P9rJkr/9Ldhn6aIpkcaGQ\nVhSFLdzfmQKBgBMG7ho/8xmdSYiN5hyGL9uN2xu7o2cSQ6cZkzSyWs9e6IIt3RsX\nc7doHf/oe0V2MjmowqVDVh5T3d3fMK+wd8Jkk2ke1QPG/SAGmWvmDJW9oa4vqoPA\nRia24YV7CqOmDHbAG/+Q4JWUsEkifRSdbDTjwuBsfiFWWQ9b7IVoBUZtAoGAa+st\nisOwUjDQWY8gRLHRzbBl3+7WMlFPvEgkbQ6BcOHxekJshtIsqK+uVdu7YE78qTRb\nq+R+s9eisRvhOpz31LXt3jUj+soiE6OxtMejC5ni9aTBiyhqJmEjti73gGXGyzk9\nb4P4aWfbUnN7VpWDxZNzj8aXtycp3euDJGnDv0ECgYEAkx8DTljZZN8gSvutk/63\nKp+Rq6s7yNDSFnUF0hR3mz6JVzwftKWfGqXMnFU0B6F7X9MvOsfb05h+yDlv6Ehz\n3/DuFrKKNOIuuJqfJ6RA9lgnItA5FvVNLDJtxfFOof1DHjiKk5RjPVNItBFMJ4C0\n2GLcLta5wf70MgE3QNYLkyI=\n-----END PRIVATE KEY-----",
-    registeredTools: [
+    LTI_TOOLS_JSON: JSON.stringify([
       {
         clientId: "pact-tool",
         name: "PACT",
@@ -289,8 +295,8 @@ function testConfig(mongoUri: string, jwksUrl: string, toolPublicJwk: Record<str
         publicJwks: { keys: [{ ...toolPublicJwk, kid: "pact-tool-key", alg: "RS256", use: "sig" }] },
         scopes: []
       }
-    ],
-    corsOrigins: []
+    ]),
+    CORS_ORIGINS: ""
   };
 }
 
