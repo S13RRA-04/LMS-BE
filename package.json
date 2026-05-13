@@ -15,7 +15,7 @@
     "staging:pact-tool": "powershell -ExecutionPolicy Bypass -File ./scripts/configure-pact-tool-staging.ps1",
     "staging:smoke:lti": "node ./scripts/smoke-lti-staging.mjs",
     "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production",
+    "deploy:production": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-production.ps1",
     "local:infra:start": "powershell -ExecutionPolicy Bypass -File ./scripts/start-local-infra.ps1",
     "local:keycloak:bootstrap": "node ./scripts/bootstrap-keycloak.mjs",
     "local:data:reset": "powershell -ExecutionPolicy Bypass -File ./scripts/reset-local-data.ps1",

@@ -157,7 +157,7 @@ npm test
 npm run deploy:staging
 ```
 
-`npm run deploy:staging` deploys `wrangler.jsonc` environment `staging`. `npm run deploy:production` deploys environment `production`.
+`npm run deploy:staging` deploys `wrangler.jsonc` environment `staging`. `npm run deploy:production` validates `.env.production`, builds, tests, dry-runs the Worker bundle, creates the production Worker if needed, uploads production secrets, redeploys, and runs health/JWKS smoke checks.
 
 Runtime secrets such as `MONGO_URI`, `KEYCLOAK_ISSUER`, `KEYCLOAK_JWKS_URI`, `LTI_PLATFORM_KID`, and `LTI_PLATFORM_PRIVATE_KEY_PEM` must also be present as Cloudflare Worker secrets before the deployed Worker can serve protected routes.
 
@@ -173,7 +173,7 @@ Upload staging secrets from `.env.staging`:
 npm run cloudflare:secrets:staging
 ```
 
-Upload production secrets from `.env.production`:
+Upload production secrets from `.env.production` without deploying:
 
 ```bash
 npm run cloudflare:secrets:production

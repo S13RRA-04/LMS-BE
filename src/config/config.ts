@@ -6,9 +6,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_BASE_URL: z.string().url(),
   MONGO_URI: z.string().min(1),
+  MONGO_USERNAME: z.string().min(1).optional(),
+  MONGO_PASSWORD: z.string().min(1).optional(),
   MONGO_DB_NAME: z.string().min(1).default("LMS"),
   MONGO_COLLECTION_PREFIX: z.string().optional(),
-  MONGO_TLS_CERT_KEY_FILE: z.string().optional(),
   KEYCLOAK_ISSUER: z.string().url(),
   KEYCLOAK_AUDIENCE: z.string().min(1),
   KEYCLOAK_JWKS_URI: z.string().url().optional(),
@@ -52,7 +53,6 @@ export type AppConfig = {
   mongoUri: string;
   mongoDbName: string;
   mongoCollectionPrefix: string;
-  mongoTlsCertKeyFile?: string;
   keycloakIssuer: string;
   keycloakAudience: string;
   keycloakJwksUri: string;
@@ -72,6 +72,8 @@ export type AppConfig = {
 
 export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema.parse(source);
+  const mongoUri = buildMongoUri(parsed.MONGO_URI, parsed.MONGO_USERNAME, parsed.MONGO_PASSWORD);
+  assertWorkerCompatibleMongoUri(mongoUri, parsed.NODE_ENV);
   const tools = z.array(registeredToolSchema).parse(JSON.parse(parsed.LTI_TOOLS_JSON));
   const issuer = parsed.KEYCLOAK_ISSUER.replace(/\/$/, "");
   const issuerUrl = new URL(issuer);
@@ -81,10 +83,9 @@ export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
     env: parsed.NODE_ENV,
     port: parsed.PORT,
     appBaseUrl: parsed.APP_BASE_URL.replace(/\/$/, ""),
-    mongoUri: parsed.MONGO_URI,
+    mongoUri,
     mongoDbName: parsed.MONGO_DB_NAME,
     mongoCollectionPrefix: parsed.MONGO_COLLECTION_PREFIX ?? (parsed.NODE_ENV === "production" ? "" : "staging_"),
-    mongoTlsCertKeyFile: parsed.MONGO_TLS_CERT_KEY_FILE,
     keycloakIssuer: issuer,
     keycloakAudience: parsed.KEYCLOAK_AUDIENCE,
     keycloakJwksUri:
@@ -104,4 +105,29 @@ export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
     registeredTools: tools,
     corsOrigins: parsed.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
   };
+}
+
+function buildMongoUri(mongoUri: string, username?: string, password?: string) {
+  if (!username && !password) {
+    return mongoUri;
+  }
+
+  if (!username || !password) {
+    throw new Error("MONGO_USERNAME and MONGO_PASSWORD must both be set when either one is provided.");
+  }
+
+  return mongoUri.replace(
+    /^(mongodb(?:\+srv)?:\/\/)(?:[^@/?]+@)?(.+)$/i,
+    (_match, prefix: string, rest: string) => `${prefix}${encodeURIComponent(username)}:${encodeURIComponent(password)}@${rest}`
+  );
+}
+
+function assertWorkerCompatibleMongoUri(mongoUri: string, nodeEnv: "development" | "test" | "production") {
+  if (/authMechanism=MONGODB-X509|authMechanism=%24external|authSource=%24external/i.test(mongoUri)) {
+    throw new Error("MONGO_URI must use MongoDB database-user credentials for Cloudflare Workers; X.509 certificate-file auth is not supported.");
+  }
+
+  if (nodeEnv === "production" && !/^mongodb(\+srv)?:\/\/[^:/@]+:[^@]+@/i.test(mongoUri)) {
+    throw new Error("MONGO_URI must include MongoDB database-user credentials.");
+  }
 }
