@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { Collection, Db, OptionalUnlessRequiredId } from "mongodb";
 import { AppError } from "../../errors/AppError.js";
 import type { Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";

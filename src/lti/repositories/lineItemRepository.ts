@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { AppError } from "../../errors/AppError.js";
 import type { LineItem, Score, ScoreRecord } from "../ltiTypes.js";
 

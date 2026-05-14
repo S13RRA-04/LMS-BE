@@ -30,8 +30,8 @@ function Read-DotEnvFile([string]$Path) {
   return $values
 }
 
-function Invoke-CheckedCommand([string]$Command, [string[]]$Arguments, [string]$InputValue) {
-  $InputValue | & $Command @Arguments
+function Invoke-CheckedCommand([string]$Command, [string[]]$Arguments) {
+  & $Command @Arguments
   if ($LASTEXITCODE -ne 0) {
     throw "$Command $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
   }
@@ -79,6 +79,16 @@ $secretNames = @(
   "LTI_PLATFORM_KID",
   "LTI_PLATFORM_PRIVATE_KEY_PEM"
 )
+$optionalSecretNames = @(
+  "KEYCLOAK_ADMIN_BASE_URL",
+  "KEYCLOAK_ADMIN_REALM",
+  "KEYCLOAK_ADMIN_TOKEN_REALM",
+  "KEYCLOAK_ADMIN_CLIENT_ID",
+  "KEYCLOAK_ADMIN_CLIENT_SECRET",
+  "KEYCLOAK_ADMIN_USERNAME",
+  "KEYCLOAK_ADMIN_PASSWORD",
+  "KEYCLOAK_WEBHOOK_SECRET"
+)
 
 foreach ($name in $secretNames) {
   if (-not $values.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($values[$name])) {
@@ -110,6 +120,22 @@ foreach ($name in $urlNames) {
   }
 }
 
+$secrets = [ordered]@{}
 foreach ($name in $secretNames) {
-  Invoke-CheckedCommand "npx" @("wrangler", "secret", "put", $name, "--env", $Target) $values[$name]
+  $secrets[$name] = $values[$name]
+}
+
+foreach ($name in $optionalSecretNames) {
+  if ($values.ContainsKey($name) -and -not [string]::IsNullOrWhiteSpace($values[$name])) {
+    $secrets[$name] = $values[$name]
+  }
+}
+
+$bulkSecretsFile = [System.IO.Path]::GetTempFileName()
+try {
+  $bulkSecretsJson = $secrets | ConvertTo-Json -Depth 5
+  Set-Content -LiteralPath $bulkSecretsFile -Value $bulkSecretsJson -Encoding UTF8 -NoNewline
+  Invoke-CheckedCommand "npx" @("wrangler", "secret", "bulk", $bulkSecretsFile, "--env", $Target)
+} finally {
+  Remove-Item -LiteralPath $bulkSecretsFile -ErrorAction SilentlyContinue
 }

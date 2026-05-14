@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { Collection, Db, OptionalUnlessRequiredId } from "mongodb";
 import type { AppConfig } from "../../config/config.js";
 import { collectionNames } from "../../db/mongo.js";

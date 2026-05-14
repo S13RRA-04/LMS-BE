@@ -31,6 +31,11 @@ export function collectionNames(config: AppConfig): MongoCollections {
 }
 
 export async function getMongoDb(config: AppConfig): Promise<Db> {
+  if (config.env === "production") {
+    const client = await connectMongoClient(config);
+    return client.db(config.mongoDbName);
+  }
+
   const key = mongoClientKey(config);
   let clientPromise = clients.get(key);
 

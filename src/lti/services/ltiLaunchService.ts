@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { AppError } from "../../errors/AppError.js";
 import { LTI_CLAIMS, LTI_SCOPES } from "../ltiConstants.js";
 import type { LaunchContextRepository } from "../repositories/launchContextRepository.js";

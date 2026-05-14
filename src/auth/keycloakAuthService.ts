@@ -31,10 +31,16 @@ export class KeycloakAuthService {
   }
 
   async verifyAccessToken(token: string): Promise<CurrentUser> {
-    const { payload } = await jwtVerify<KeycloakPayload>(token, this.jwks, {
-      issuer: this.config.keycloakIssuer,
-      audience: this.config.keycloakAudience
-    });
+    let payload: KeycloakPayload;
+    try {
+      const result = await jwtVerify<KeycloakPayload>(token, this.jwks, {
+        issuer: this.config.keycloakIssuer,
+        audience: this.config.keycloakAudience
+      });
+      payload = result.payload;
+    } catch {
+      throw new AppError(401, "INVALID_ACCESS_TOKEN", "Access token is invalid or expired");
+    }
 
     const id = requireSubject(payload.sub);
     const rawRoles = collectRoles(payload, this.config.keycloakAudience);

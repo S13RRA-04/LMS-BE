@@ -634,14 +634,39 @@ function logError(error: unknown, requestId: string, request: Request) {
     return;
   }
 
-  console.error(
-    JSON.stringify({
-      level: "error",
-      msg: "Unhandled Worker request error",
-      requestId,
-      method: request.method,
-      url: new URL(request.url).pathname,
-      error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
-    })
-  );
+  try {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "Unhandled Worker request error",
+        requestId,
+        method: request.method,
+        url: new URL(request.url).pathname,
+        error: serializeUnknownError(error)
+      })
+    );
+  } catch {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        msg: "Unhandled Worker request error",
+        requestId,
+        method: request.method,
+        url: new URL(request.url).pathname,
+        error: { type: typeof error }
+      })
+    );
+  }
+}
+
+function serializeUnknownError(error: unknown) {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message, stack: error.stack };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return { type: Object.prototype.toString.call(error) };
+  }
+
+  return error;
 }
