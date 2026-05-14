@@ -187,6 +187,10 @@ export class MongoLmsRepository implements LmsRepository {
     return stripId(course);
   }
 
+  async requireActiveCohortForCourse(cohortId: string, courseId: string): Promise<Cohort> {
+    return stripId(await this.requireCohortForCourse(cohortId, courseId));
+  }
+
   private portalSettings() {
     return this.db.collection<Stored<PortalSettings>>(this.names.portalSettings);
   }
@@ -220,6 +224,7 @@ export class MongoLmsRepository implements LmsRepository {
     if (!cohort) {
       throw new AppError(400, "COHORT_NOT_AVAILABLE", "Cohort is not active for this course");
     }
+    return cohort;
   }
 
   private async insertUnique<T>(

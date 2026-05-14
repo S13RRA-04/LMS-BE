@@ -203,9 +203,9 @@ Example tool registration:
     "clientId": "pact-tool",
     "name": "PACT",
     "deploymentIds": ["pact-course-deployment"],
-    "redirectUris": ["https://pact.example.com/lti/launch"],
-    "deepLinkRedirectUris": ["https://pact.example.com/lti/deep-link"],
-    "targetLinkUri": "https://pact.example.com/lti/launch",
+    "redirectUris": ["https://pact-api.example.com/api/v1/lti/launch"],
+    "deepLinkRedirectUris": ["https://pact-api.example.com/api/v1/lti/deep-link"],
+    "targetLinkUri": "https://pact-api.example.com/launch",
     "publicJwks": { "keys": [] },
     "scopes": [
       "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem",
@@ -220,6 +220,8 @@ Example tool registration:
 ## Architecture notes
 
 Worker routes validate request shapes and delegate to services. LMS records, audit logs, LTI content items, line items, and AGS scores use Mongo-backed repositories.
+
+The LMS/PACT service contract is documented in `docs/lms-pact-boundary.md`. LMS owns Keycloak-authenticated users, enrollments, launch authorization, LTI platform behavior, and official AGS grade records. PACT owns validated launch sessions, PACT content/progress/scores, squads, and AGS publish attempts.
 
 Use `npm run staging:pact-tool -- -PactApiBaseUrl https://<pact-api-origin>` to refresh staging `LTI_TOOLS_JSON` with PACT launch URL, Deep Linking URL, and the public JWKS from PACT.
 

@@ -54,6 +54,7 @@ async function assertDeepLinkPost(input) {
     "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiDeepLinkingRequest",
     "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
     "https://purl.imsglobal.org/spec/lti/claim/deployment_id": input.deploymentId,
+    "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": input.pactDeepLinkUrl,
     "https://purl.imsglobal.org/spec/lti/claim/context": { id: "cohort-pact-smoke", title: "PACT Staging Smoke" },
     "https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings": {
       deep_link_return_url: input.returnUrl,

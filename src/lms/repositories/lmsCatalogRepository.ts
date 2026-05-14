@@ -230,6 +230,10 @@ export class LmsCatalogRepository implements LmsRepository {
     return course;
   }
 
+  async requireActiveCohortForCourse(cohortId: string, courseId: string) {
+    return this.requireCohortForCourse(cohortId, courseId);
+  }
+
   private requireCourses(courseIds: string[]) {
     const missingCourse = uniqueValues(courseIds).find((courseId) => !this.courses.some((course) => course.id === courseId));
     if (missingCourse) {
@@ -238,9 +242,11 @@ export class LmsCatalogRepository implements LmsRepository {
   }
 
   private requireCohortForCourse(cohortId: string, courseId: string) {
-    if (!this.cohorts.some((cohort) => cohort.id === cohortId && cohort.status === "active" && cohort.courseIds.includes(courseId))) {
+    const cohort = this.cohorts.find((candidate) => candidate.id === cohortId && candidate.status === "active" && candidate.courseIds.includes(courseId));
+    if (!cohort) {
       throw new AppError(400, "COHORT_NOT_AVAILABLE", "Cohort is not active for this course");
     }
+    return cohort;
   }
 }
 

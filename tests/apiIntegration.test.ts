@@ -141,6 +141,21 @@ describe("LMS Worker API integration", () => {
     expect(text).toContain("id_token");
     expect(text).toContain("https://pact.example.test/lti/launch");
     const claims = decodeJwtPayload(extractHiddenInput(text, "id_token"));
+    expect(claims).toMatchObject({
+      sub: "learner-1",
+      aud: "pact-tool",
+      iss: "http://localhost:4000",
+      "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiResourceLinkRequest",
+      "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
+      "https://purl.imsglobal.org/spec/lti/claim/deployment_id": "pact-course-deployment",
+      "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": "https://pact.example.test/lti/launch",
+      "https://purl.imsglobal.org/spec/lti/claim/resource_link": { id: "pact", title: "PACT" },
+      "https://purl.imsglobal.org/spec/lti/claim/context": { id: "cohort-alpha", title: "PACT" },
+      "https://purl.imsglobal.org/spec/lti/claim/custom": {
+        course_id: "pact",
+        cohort_id: "cohort-alpha"
+      }
+    });
     expect(JSON.stringify(claims).toLowerCase()).not.toContain("squad");
   });
 
@@ -178,7 +193,17 @@ describe("LMS Worker API integration", () => {
     expect(launch.status).toBe(200);
     const launchHtml = await launch.text();
     expect(launchHtml).toContain("https://pact.example.test/lti/launch");
-    expect(decodeJwtPayload(extractHiddenInput(launchHtml, "id_token"))["https://purl.imsglobal.org/spec/lti/claim/roles"]).toEqual([
+    const claims = decodeJwtPayload(extractHiddenInput(launchHtml, "id_token"));
+    expect(claims).toMatchObject({
+      sub: "admin-without-enrollment",
+      aud: "pact-tool",
+      "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiResourceLinkRequest",
+      "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
+      "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": "https://pact.example.test/lti/launch",
+      "https://purl.imsglobal.org/spec/lti/claim/resource_link": { id: "pact-admin-open", title: "PACT Admin Open" },
+      "https://purl.imsglobal.org/spec/lti/claim/context": { id: "pact-admin-open", title: "PACT Admin Open" }
+    });
+    expect(claims["https://purl.imsglobal.org/spec/lti/claim/roles"]).toEqual([
       "http://purl.imsglobal.org/vocab/lis/v2/membership#Administrator"
     ]);
   });
@@ -211,11 +236,93 @@ describe("LMS Worker API integration", () => {
     const text = await response.text();
     expect(text).toContain("id_token");
     expect(text).toContain("https://pact.example.test/lti/deep-link");
+    const claims = decodeJwtPayload(extractHiddenInput(text, "id_token"));
+    expect(claims).toMatchObject({
+      aud: "pact-tool",
+      "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiDeepLinkingRequest",
+      "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
+      "https://purl.imsglobal.org/spec/lti/claim/deployment_id": "pact-course-deployment",
+      "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": "https://pact.example.test/lti/launch",
+      "https://purl.imsglobal.org/spec/lti/claim/context": { id: "cohort-alpha", title: "PACT Deep Link" },
+      "https://purl.imsglobal.org/spec/lti/claim/custom": {
+        course_id: "pact-deep-link",
+        cohort_id: "cohort-alpha"
+      }
+    });
+    expect(claims["https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings"]).toMatchObject({
+      deep_link_return_url: "http://localhost:4000/api/v1/lti/deep-linking/return",
+      accept_types: ["ltiResourceLink"]
+    });
 
     await api("POST", "/api/v1/lms/admin/courses/pact-deep-link/deep-link", {
       headers: { "x-dev-user-id": "learner-1", "x-dev-user-roles": "learner" },
       body: { cohortId: "cohort-alpha" }
     }).then((learnerResponse) => expect(learnerResponse.status).toBe(403));
+  });
+
+  it("allows admins to launch a PACT AGS context refresh shortcut", async () => {
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "pact-ags-refresh",
+        slug: "pact-ags-refresh",
+        title: "PACT AGS Refresh",
+        description: "Practical cyber training course and tool launch.",
+        type: "lti_tool",
+        status: "published",
+        category: "Cyber Operations",
+        departmentIds: ["cyber-training"],
+        allowSelfEnrollment: false,
+        estimatedMinutes: 120,
+        ltiToolClientId: "pact-tool"
+      }
+    }).then((response) => expect(response.status).toBe(201));
+
+    await api("POST", "/api/v1/lms/admin/cohorts", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "cohort-ags-refresh",
+        name: "AGS Refresh Cohort",
+        courseIds: ["pact-ags-refresh"],
+        status: "active"
+      }
+    }).then((response) => expect(response.status).toBe(201));
+
+    const response = await api("POST", "/api/v1/lms/admin/courses/pact-ags-refresh/ags-context-refresh", {
+      headers: devAdminHeaders(),
+      body: { cohortId: "cohort-ags-refresh" }
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const text = await response.text();
+    expect(text).toContain("id_token");
+    expect(text).toContain("https://pact.example.test/lti/launch");
+    const claims = decodeJwtPayload(extractHiddenInput(text, "id_token"));
+    expect(claims).toMatchObject({
+      aud: "pact-tool",
+      "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiResourceLinkRequest",
+      "https://purl.imsglobal.org/spec/lti/claim/resource_link": { id: "pact-ags-refresh:ags-context-refresh", title: "PACT AGS Refresh AGS Context Refresh" },
+      "https://purl.imsglobal.org/spec/lti/claim/context": { id: "cohort-ags-refresh", title: "PACT AGS Refresh" },
+      "https://purl.imsglobal.org/spec/lti/claim/custom": {
+        course_id: "pact-ags-refresh",
+        cohort_id: "cohort-ags-refresh",
+        ags_context_refresh: "true"
+      }
+    });
+    expect(claims["https://purl.imsglobal.org/spec/lti-ags/claim/endpoint"].scope).toContain(
+      "https://purl.imsglobal.org/spec/lti-ags/scope/score"
+    );
+
+    await api("POST", "/api/v1/lms/admin/courses/pact-ags-refresh/ags-context-refresh", {
+      headers: { "x-dev-user-id": "learner-1", "x-dev-user-roles": "learner" },
+      body: { cohortId: "cohort-alpha" }
+    }).then((learnerResponse) => expect(learnerResponse.status).toBe(403));
+
+    await api("POST", "/api/v1/lms/admin/courses/pact-ags-refresh/ags-context-refresh", {
+      headers: devAdminHeaders(),
+      body: { cohortId: "missing-cohort" }
+    }).then((invalidCohortResponse) => expect(invalidCohortResponse.status).toBe(400));
   });
 
   it("allows admins to manage cohorts for courses", async () => {

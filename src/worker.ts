@@ -267,6 +267,24 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
     );
   }
 
+  const agsContextRefreshMatch = path.match(/^\/lms\/admin\/courses\/([^/]+)\/ags-context-refresh$/);
+  if (agsContextRefreshMatch && request.method === "POST") {
+    requireRole(currentUser, ["admin"]);
+    const { repository, launchService } = await services(config);
+    const body = deepLinkLaunchSchema.parse(await jsonBody(request));
+    const course = await repository.requireCourse(decodeURIComponent(agsContextRefreshMatch[1]));
+    if (body.cohortId) {
+      await repository.requireActiveCohortForCourse(body.cohortId, course.id);
+    }
+    return html(
+      await launchService.createAgsContextRefreshLaunchForm({
+        course,
+        user: currentUser,
+        cohortId: body.cohortId
+      })
+    );
+  }
+
   if (path === "/lms/admin/departments" && request.method === "GET") {
     requireRole(currentUser, ["admin"]);
     const { adminExperience } = await services(config);

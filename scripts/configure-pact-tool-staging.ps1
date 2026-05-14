@@ -81,7 +81,12 @@ $tool = @(
     deepLinkRedirectUris = @($DeepLinkUrl)
     targetLinkUri = $TargetLinkUri
     publicJwks = $jwks
-    scopes = @()
+    scopes = @(
+      "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem",
+      "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem.readonly",
+      "https://purl.imsglobal.org/spec/lti-ags/scope/result.readonly",
+      "https://purl.imsglobal.org/spec/lti-ags/scope/score"
+    )
   }
 )
 
