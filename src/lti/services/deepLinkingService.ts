@@ -35,19 +35,25 @@ export class DeepLinkingService {
     const context = parseDeepLinkData(payload.data);
     const accepted = await Promise.all(
       (items as DeepLinkContentItem[]).map(async (item) => {
-        const lineItem = await this.lineItems.upsertFromDeepLink(item);
+        const cohortId = cohortIdForDeepLinkedItem(item, context.cohortId);
+        const lineItem = await this.lineItems.upsertFromDeepLink(item, { cohortId });
         return this.lineItems.saveDeepLinkedContent({
           toolClientId: tool.clientId,
           item,
           lineItem,
           courseId: context.courseId,
-          cohortId: context.cohortId
+          cohortId
         });
       })
     );
 
     return { accepted, count: accepted.length };
   }
+}
+
+function cohortIdForDeepLinkedItem(item: DeepLinkContentItem, cohortId: string | undefined) {
+  const tag = item.lineItem?.tag ?? item.type;
+  return tag === "challenge" ? cohortId : undefined;
 }
 
 function parseDeepLinkData(value: unknown) {

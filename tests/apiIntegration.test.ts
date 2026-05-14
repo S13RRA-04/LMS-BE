@@ -305,8 +305,13 @@ describe("LMS Worker API integration", () => {
 
     expect(accepted.status).toBe(200);
     await expect(accepted.json()).resolves.toMatchObject({
-      count: 1,
+      count: 2,
       accepted: [
+        {
+          toolClientId: "pact-tool",
+          title: "PACT Modules",
+          courseId: "pact"
+        },
         {
           toolClientId: "pact-tool",
           title: "PACT Squad Challenges",
@@ -321,14 +326,18 @@ describe("LMS Worker API integration", () => {
     });
 
     expect(deepLinks.status).toBe(200);
-    const body = await deepLinks.json() as { contentItems: unknown[]; lineItems: Array<{ label: string; scoreMaximum: number; resourceId: string; tag: string }> };
-    expect(body.contentItems).toHaveLength(1);
-    expect(body.lineItems[0]).toMatchObject({
-      label: "PACT Squad Challenges",
-      scoreMaximum: 100,
-      resourceId: "pact-challenge-hub",
-      tag: "challenge"
-    });
+    const body = await deepLinks.json() as {
+      contentItems: Array<{ title: string; cohortId?: string | null }>;
+      lineItems: Array<{ label: string; scoreMaximum: number; resourceId: string; tag: string; cohortId?: string | null }>;
+    };
+    expect(body.contentItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "PACT Modules", cohortId: null }),
+      expect.objectContaining({ title: "PACT Squad Challenges", cohortId: "cohort-alpha" })
+    ]));
+    expect(body.lineItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: "PACT Modules", resourceId: "pact-module-hub", tag: "module", cohortId: null }),
+      expect.objectContaining({ label: "PACT Squad Challenges", scoreMaximum: 100, resourceId: "pact-challenge-hub", tag: "challenge", cohortId: "cohort-alpha" })
+    ]));
   });
 
   it("rejects unauthenticated Keycloak user sync events", async () => {
@@ -399,6 +408,17 @@ async function signDeepLinkResponse(privateKey: KeyLike, config: AppConfig) {
     "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiDeepLinkingResponse",
     "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
     "https://purl.imsglobal.org/spec/lti-dl/claim/content_items": [
+      {
+        type: "ltiResourceLink",
+        title: "PACT Modules",
+        url: "https://pact.example.test/launch/module",
+        lineItem: {
+          label: "PACT Modules",
+          scoreMaximum: 100,
+          resourceId: "pact-module-hub",
+          tag: "module"
+        }
+      },
       {
         type: "ltiResourceLink",
         title: "PACT Squad Challenges",

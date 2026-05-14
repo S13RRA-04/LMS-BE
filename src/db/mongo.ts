@@ -96,9 +96,16 @@ export async function ensureMongoCollections(config: AppConfig) {
   await db.collection(names.auditLogs).createIndex({ actorUserId: 1, occurredAt: -1 });
   await db.collection(names.auditLogs).createIndex({ action: 1, occurredAt: -1 });
   await db.collection(names.ltiContentItems).createIndex({ id: 1 }, { unique: true });
-  await db.collection(names.ltiContentItems).createIndex({ toolClientId: 1, resourceId: 1 }, { unique: true, sparse: true });
+  await db.collection(names.ltiContentItems).createIndex(
+    { toolClientId: 1, resourceId: 1, cohortId: 1 },
+    { unique: true, sparse: true, name: "lti_content_resource_scope_unique" }
+  );
   await db.collection(names.ltiContentItems).createIndex({ courseId: 1, cohortId: 1 });
   await db.collection(names.ltiLineItems).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.ltiLineItems).createIndex({ resourceId: 1, tag: 1 });
+  await db.collection(names.ltiLineItems).createIndex(
+    { resourceId: 1, tag: 1, cohortId: 1 },
+    { unique: true, sparse: true, name: "lti_line_item_resource_scope_unique" }
+  );
   await db.collection(names.ltiScores).createIndex({ lineItemId: 1, userId: 1 });
 }

@@ -36,7 +36,7 @@ export class MongoLineItemRepository {
     return item;
   }
 
-  async upsertFromDeepLink(item: DeepLinkContentItem): Promise<LineItem | undefined> {
+  async upsertFromDeepLink(item: DeepLinkContentItem, input: { cohortId?: string } = {}): Promise<LineItem | undefined> {
     if (!item.lineItem) {
       return undefined;
     }
@@ -44,18 +44,19 @@ export class MongoLineItemRepository {
     const now = new Date().toISOString();
     const resourceId = item.lineItem.resourceId ?? item.url ?? item.title;
     const tag = item.lineItem.tag ?? item.type;
-    const existing = await this.lineItems().findOne({ resourceId, tag });
+    const existing = await this.lineItems().findOne(scopedItemFilter(resourceId, tag, input.cohortId));
     const lineItem: LineItem = {
       id: existing?.id ?? crypto.randomUUID(),
       label: item.lineItem.label ?? item.title,
       scoreMaximum: item.lineItem.scoreMaximum ?? 100,
       resourceId,
       tag,
+      cohortId: input.cohortId,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
     };
 
-    await this.lineItems().updateOne({ resourceId, tag }, { $set: lineItem }, { upsert: true });
+    await this.lineItems().updateOne(scopedItemFilter(resourceId, tag, input.cohortId), { $set: lineItem }, { upsert: true });
     return lineItem;
   }
 
@@ -86,7 +87,7 @@ export class MongoLineItemRepository {
   }): Promise<DeepLinkedContent> {
     const now = new Date().toISOString();
     const resourceId = input.item.lineItem?.resourceId ?? input.item.url ?? input.item.title;
-    const existing = await this.contentItems().findOne({ toolClientId: input.toolClientId, resourceId });
+    const existing = await this.contentItems().findOne(scopedContentFilter(input.toolClientId, resourceId, input.cohortId));
     const content: DeepLinkedContent = {
       id: existing?.id ?? crypto.randomUUID(),
       toolClientId: input.toolClientId,
@@ -103,7 +104,7 @@ export class MongoLineItemRepository {
       updatedAt: now
     };
 
-    await this.contentItems().updateOne({ toolClientId: input.toolClientId, resourceId }, { $set: content }, { upsert: true });
+    await this.contentItems().updateOne(scopedContentFilter(input.toolClientId, resourceId, input.cohortId), { $set: content }, { upsert: true });
     return content;
   }
 
@@ -123,4 +124,20 @@ export class MongoLineItemRepository {
 function stripId<T>(document: Stored<T>): T {
   const { _id: _ignored, ...rest } = document;
   return rest as T;
+}
+
+function scopedItemFilter(resourceId: string, tag: string | undefined, cohortId: string | undefined) {
+  return {
+    resourceId,
+    tag,
+    ...(cohortId ? { cohortId } : { $or: [{ cohortId: null }, { cohortId: { $exists: false } }] })
+  };
+}
+
+function scopedContentFilter(toolClientId: string, resourceId: string | undefined, cohortId: string | undefined) {
+  return {
+    toolClientId,
+    resourceId,
+    ...(cohortId ? { cohortId } : { $or: [{ cohortId: null }, { cohortId: { $exists: false } }] })
+  };
 }

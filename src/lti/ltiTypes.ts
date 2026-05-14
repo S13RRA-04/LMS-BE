@@ -34,6 +34,7 @@ export type LineItem = {
   scoreMaximum: number;
   resourceId?: string;
   tag?: string;
+  cohortId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -48,7 +49,7 @@ export type DeepLinkedContent = {
   resourceId?: string;
   tag?: string;
   courseId?: string;
-  cohortId?: string;
+  cohortId?: string | null;
   lineItemId?: string;
   createdAt: string;
   updatedAt: string;
@@ -75,7 +76,7 @@ export type AgsGradeRecord = ScoreRecord & {
   resourceId?: string;
   tag?: string;
   courseId?: string;
-  cohortId?: string;
+  cohortId?: string | null;
   contentTitle?: string;
 };
 
