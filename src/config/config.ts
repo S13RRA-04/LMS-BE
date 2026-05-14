@@ -74,6 +74,7 @@ export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
   const parsed = envSchema.parse(source);
   const mongoUri = buildMongoUri(parsed.MONGO_URI, parsed.MONGO_USERNAME, parsed.MONGO_PASSWORD);
   assertWorkerCompatibleMongoUri(mongoUri, parsed.NODE_ENV);
+  assertLmsMongoDatabaseName(parsed.MONGO_DB_NAME);
   const tools = z.array(registeredToolSchema).parse(JSON.parse(parsed.LTI_TOOLS_JSON));
   const issuer = parsed.KEYCLOAK_ISSUER.replace(/\/$/, "");
   const issuerUrl = new URL(issuer);
@@ -129,5 +130,12 @@ function assertWorkerCompatibleMongoUri(mongoUri: string, nodeEnv: "development"
 
   if (nodeEnv === "production" && !/^mongodb(\+srv)?:\/\/[^:/@]+:[^@]+@/i.test(mongoUri)) {
     throw new Error("MONGO_URI must include MongoDB database-user credentials.");
+  }
+}
+
+function assertLmsMongoDatabaseName(databaseName: string) {
+  const normalized = databaseName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalized.includes("pact") || normalized.includes("keycloak")) {
+    throw new Error("LMS MONGO_DB_NAME must be LMS-specific and must not point at the PACT or Keycloak database.");
   }
 }

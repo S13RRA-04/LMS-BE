@@ -107,8 +107,9 @@ the courses enrolled for the signed-in user. LTI tool launch from the LMS is
 gated by enrollment: `/courses/:courseId/launch` returns a server-signed LTI
 form post only when the current user has an active enrollment for that course.
 For PACT, the enrollment `cohortId` is emitted as the LTI context ID so the PACT
-service can deliver cohort-specific modules, challenges, games, squads, and
-scoreboards after SSO.
+service can deliver cohort-specific modules, challenges, games, and scoreboards
+after SSO. Squad assignment and squad-specific state are PACT-owned and must not
+be stored or emitted by the LMS.
 
 Successful admin writes create audit log records with actor, Keycloak subject, action, target, request ID, timestamp, and safe metadata.
 
@@ -123,7 +124,7 @@ Successful admin writes create audit log records with actor, Keycloak subject, a
 - `POST /api/v1/lti/deep-linking/return` accepts a tool-signed Deep Linking response.
 
 PACT should post individual learner module/game scores and learner-specific
-derived grades to AGS. Squad challenge scores should remain PACT-owned until
+derived grades to AGS. PACT team challenge scores should remain PACT-owned until
 PACT maps them into learner gradebook outcomes.
 
 ## Required environment

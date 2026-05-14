@@ -140,6 +140,8 @@ describe("LMS Worker API integration", () => {
     const text = await launch.text();
     expect(text).toContain("id_token");
     expect(text).toContain("https://pact.example.test/lti/launch");
+    const claims = decodeJwtPayload(extractHiddenInput(text, "id_token"));
+    expect(JSON.stringify(claims).toLowerCase()).not.toContain("squad");
   });
 
   it("allows admins to launch an LTI course without enrollment", async () => {
@@ -318,7 +320,7 @@ describe("LMS Worker API integration", () => {
         },
         {
           toolClientId: "pact-tool",
-          title: "PACT Squad Challenges",
+          title: "PACT Challenges",
           courseId: "pact",
           cohortId: "cohort-alpha"
         }
@@ -336,12 +338,13 @@ describe("LMS Worker API integration", () => {
     };
     expect(body.contentItems).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: "PACT Modules", cohortId: null }),
-      expect.objectContaining({ title: "PACT Squad Challenges", cohortId: "cohort-alpha" })
+      expect.objectContaining({ title: "PACT Challenges", cohortId: "cohort-alpha" })
     ]));
     expect(body.lineItems).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: "PACT Modules", resourceId: "pact-module-hub", tag: "module", cohortId: null }),
-      expect.objectContaining({ label: "PACT Squad Challenges", scoreMaximum: 100, resourceId: "pact-challenge-hub", tag: "challenge", cohortId: "cohort-alpha" })
+      expect.objectContaining({ label: "PACT Challenges", scoreMaximum: 100, resourceId: "pact-challenge-hub", tag: "challenge", cohortId: "cohort-alpha" })
     ]));
+    expect(JSON.stringify(body).toLowerCase()).not.toContain("squad");
   });
 
   it("rejects unauthenticated Keycloak user sync events", async () => {
@@ -425,10 +428,10 @@ async function signDeepLinkResponse(privateKey: KeyLike, config: AppConfig) {
       },
       {
         type: "ltiResourceLink",
-        title: "PACT Squad Challenges",
+        title: "PACT Challenges",
         url: "https://pact.example.test/launch/challenge",
         lineItem: {
-          label: "PACT Squad Challenges",
+          label: "PACT Challenges",
           scoreMaximum: 100,
           resourceId: "pact-challenge-hub",
           tag: "challenge"
