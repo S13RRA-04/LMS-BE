@@ -1,11 +1,13 @@
 import type { Collection, Db, OptionalUnlessRequiredId } from "mongodb";
 import { AppError } from "../../errors/AppError.js";
-import type { Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
+import type { Cohort, Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
 import type {
+  CreateCohortInput,
   CreateCourseInput,
   CreateDepartmentInput,
   CreateEnrollmentInput,
   LmsRepository,
+  UpdateCohortInput,
   UpdateCourseInput,
   UpdateDepartmentInput,
   UpdateEnrollmentInput,
@@ -72,6 +74,42 @@ export class MongoLmsRepository implements LmsRepository {
     return this.updateRequired(this.departments(), id, input, "DEPARTMENT_NOT_FOUND", "Department was not found");
   }
 
+  async listCohorts(): Promise<Cohort[]> {
+    return (await this.cohorts().find().sort({ name: 1 }).toArray()).map(stripId);
+  }
+
+  async createCohort(input: CreateCohortInput): Promise<Cohort> {
+    await this.requireCourses(input.courseIds);
+    const timestamp = new Date().toISOString();
+    const cohort: Cohort = { ...input, courseIds: uniqueValues(input.courseIds), createdAt: timestamp, updatedAt: timestamp };
+    await this.insertUnique(this.cohorts(), cohort, "COHORT_EXISTS", "Cohort already exists");
+    return cohort;
+  }
+
+  async updateCohort(id: string, input: UpdateCohortInput): Promise<Cohort> {
+    if (input.courseIds) {
+      await this.requireCourses(input.courseIds);
+    }
+    return this.updateRequired(
+      this.cohorts(),
+      id,
+      { ...input, ...(input.courseIds ? { courseIds: uniqueValues(input.courseIds) } : {}), updatedAt: new Date().toISOString() },
+      "COHORT_NOT_FOUND",
+      "Cohort was not found"
+    );
+  }
+
+  async deleteCohort(id: string): Promise<void> {
+    const referenced = await this.enrollments().findOne({ cohortId: id });
+    if (referenced) {
+      throw new AppError(409, "COHORT_IN_USE", "Cohort is assigned to one or more enrollments");
+    }
+    const result = await this.cohorts().deleteOne({ id });
+    if (!result.deletedCount) {
+      throw new AppError(404, "COHORT_NOT_FOUND", "Cohort was not found");
+    }
+  }
+
   async listPublishedCourses(): Promise<Course[]> {
     return (await this.courses().find({ status: "published" }).sort({ title: 1 }).toArray()).map(stripId);
   }
@@ -112,6 +150,9 @@ export class MongoLmsRepository implements LmsRepository {
 
   async createEnrollment(input: CreateEnrollmentInput): Promise<Enrollment> {
     await this.requireCourse(input.courseId);
+    if (input.cohortId) {
+      await this.requireCohortForCourse(input.cohortId, input.courseId);
+    }
     const enrollment: Enrollment = {
       id: input.id ?? crypto.randomUUID(),
       userId: input.userId,
@@ -128,6 +169,13 @@ export class MongoLmsRepository implements LmsRepository {
   }
 
   async updateEnrollment(id: string, input: UpdateEnrollmentInput): Promise<Enrollment> {
+    if (input.cohortId) {
+      const existing = await this.enrollments().findOne({ id });
+      if (!existing) {
+        throw new AppError(404, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
+      }
+      await this.requireCohortForCourse(input.cohortId, existing.courseId);
+    }
     return this.updateRequired(this.enrollments(), id, input, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
   }
 
@@ -151,8 +199,27 @@ export class MongoLmsRepository implements LmsRepository {
     return this.db.collection<Stored<Course>>(this.names.courses);
   }
 
+  private cohorts() {
+    return this.db.collection<Stored<Cohort>>(this.names.cohorts);
+  }
+
   private enrollments() {
     return this.db.collection<Stored<Enrollment>>(this.names.enrollments);
+  }
+
+  private async requireCourses(courseIds: string[]) {
+    const uniqueCourseIds = uniqueValues(courseIds);
+    const count = await this.courses().countDocuments({ id: { $in: uniqueCourseIds } });
+    if (count !== uniqueCourseIds.length) {
+      throw new AppError(400, "COHORT_COURSE_NOT_FOUND", "Cohort references a course that was not found");
+    }
+  }
+
+  private async requireCohortForCourse(cohortId: string, courseId: string) {
+    const cohort = await this.cohorts().findOne({ id: cohortId, courseIds: courseId, status: "active" });
+    if (!cohort) {
+      throw new AppError(400, "COHORT_NOT_AVAILABLE", "Cohort is not active for this course");
+    }
   }
 
   private async insertUnique<T>(
@@ -204,4 +271,8 @@ function stripId<T>(document: Stored<T>): T {
 
 function isDuplicateKey(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values));
 }

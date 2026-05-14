@@ -103,6 +103,25 @@ describe("LMS Cloudflare Worker integration", () => {
 
     expect(blocked.status).toBe(403);
 
+    const cohort = await worker.fetch(
+      new Request("https://lms-worker.example.test/api/v1/lms/admin/cohorts", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-dev-user-id": "admin-user",
+          "x-dev-user-roles": "admin"
+        },
+        body: JSON.stringify({
+          id: "worker-cohort",
+          name: "Worker Cohort",
+          courseIds: ["worker-pact"],
+          status: "active"
+        })
+      }),
+      env
+    );
+    expect(cohort.status).toBe(201);
+
     const enrolled = await worker.fetch(
       new Request("https://lms-worker.example.test/api/v1/lms/admin/enrollments", {
         method: "POST",

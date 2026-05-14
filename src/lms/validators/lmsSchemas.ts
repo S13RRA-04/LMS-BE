@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const courseTypeSchema = z.enum(["online", "instructor_led", "curriculum", "bundle", "lti_tool"]);
 const courseStatusSchema = z.enum(["draft", "published", "archived"]);
+const cohortStatusSchema = z.enum(["active", "archived"]);
 const enrollmentStatusSchema = z.enum(["not_started", "in_progress", "completed", "failed", "expired"]);
 const lmsRoleSchema = z.enum(["learner", "instructor", "admin"]);
 
@@ -35,6 +36,19 @@ export const departmentUpdateSchema = departmentCreateSchema
   .omit({ id: true })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: "At least one department field is required" });
+
+export const cohortCreateSchema = z.object({
+  id: z.string().min(1).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  name: z.string().min(1).max(255),
+  description: z.string().max(1000).optional(),
+  courseIds: z.array(z.string().min(1).max(120)).min(1),
+  status: cohortStatusSchema.default("active")
+}).strict();
+
+export const cohortUpdateSchema = cohortCreateSchema
+  .omit({ id: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: "At least one cohort field is required" });
 
 export const enrollmentCreateSchema = z.object({
   id: z.string().min(1).max(120).optional(),

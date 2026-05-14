@@ -105,6 +105,16 @@ describe("LMS Worker API integration", () => {
       }
     }).then((response) => expect(response.status).toBe(201));
 
+    await api("POST", "/api/v1/lms/admin/cohorts", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "cohort-alpha",
+        name: "Alpha Cohort",
+        courseIds: ["pact"],
+        status: "active"
+      }
+    }).then((response) => expect(response.status).toBe(201));
+
     await api("POST", "/api/v1/lms/admin/enrollments", {
       headers: devAdminHeaders(),
       body: {
@@ -200,6 +210,90 @@ describe("LMS Worker API integration", () => {
       headers: { "x-dev-user-id": "learner-1", "x-dev-user-roles": "learner" },
       body: { cohortId: "cohort-alpha" }
     }).then((learnerResponse) => expect(learnerResponse.status).toBe(403));
+  });
+
+  it("allows admins to manage cohorts for courses", async () => {
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "cohort-course",
+        slug: "cohort-course",
+        title: "Cohort Course",
+        description: "Course with managed cohorts.",
+        type: "online",
+        status: "published",
+        category: "Cyber Operations",
+        departmentIds: ["cyber-training"],
+        allowSelfEnrollment: false
+      }
+    }).then((response) => expect(response.status).toBe(201));
+
+    const created = await api("POST", "/api/v1/lms/admin/cohorts", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "cohort-blue",
+        name: "Blue Team Cohort",
+        description: "Blue team learners.",
+        courseIds: ["cohort-course"],
+        status: "active"
+      }
+    });
+
+    expect(created.status).toBe(201);
+    await expect(created.json()).resolves.toMatchObject({ id: "cohort-blue", courseIds: ["cohort-course"] });
+
+    const updated = await api("PATCH", "/api/v1/lms/admin/cohorts/cohort-blue", {
+      headers: devAdminHeaders(),
+      body: { status: "archived" }
+    });
+
+    expect(updated.status).toBe(200);
+    await expect(updated.json()).resolves.toMatchObject({ id: "cohort-blue", status: "archived" });
+
+    const learnerResponse = await api("GET", "/api/v1/lms/admin/cohorts", {
+      headers: { "x-dev-user-id": "learner-1", "x-dev-user-roles": "learner" }
+    });
+    expect(learnerResponse.status).toBe(403);
+  });
+
+  it("rejects enrollment into a cohort that is not active for the course", async () => {
+    await api("POST", "/api/v1/lms/admin/courses", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "invalid-cohort-course",
+        slug: "invalid-cohort-course",
+        title: "Invalid Cohort Course",
+        description: "Course with archived cohort.",
+        type: "online",
+        status: "published",
+        category: "Cyber Operations",
+        departmentIds: ["cyber-training"],
+        allowSelfEnrollment: false
+      }
+    }).then((courseResponse) => expect(courseResponse.status).toBe(201));
+
+    await api("POST", "/api/v1/lms/admin/cohorts", {
+      headers: devAdminHeaders(),
+      body: {
+        id: "cohort-archived",
+        name: "Archived Cohort",
+        courseIds: ["invalid-cohort-course"],
+        status: "archived"
+      }
+    }).then((cohortResponse) => expect(cohortResponse.status).toBe(201));
+
+    const response = await api("POST", "/api/v1/lms/admin/enrollments", {
+      headers: devAdminHeaders(),
+      body: {
+        userId: "learner-invalid-cohort",
+        courseId: "invalid-cohort-course",
+        cohortId: "cohort-archived",
+        status: "not_started",
+        progressPercent: 0
+      }
+    });
+
+    expect(response.status).toBe(400);
   });
 
   it("persists accepted PACT Deep Linking items as LMS content and line items", async () => {

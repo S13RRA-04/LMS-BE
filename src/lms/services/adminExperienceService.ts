@@ -1,8 +1,10 @@
 import type {
+  CreateCohortInput,
   CreateCourseInput,
   CreateDepartmentInput,
   CreateEnrollmentInput,
   LmsRepository,
+  UpdateCohortInput,
   UpdateCourseInput,
   UpdateDepartmentInput,
   UpdateEnrollmentInput,
@@ -66,6 +68,47 @@ export class AdminExperienceService {
 
   async listDepartments() {
     return this.catalog.listDepartments();
+  }
+
+  async listCohorts() {
+    return this.catalog.listCohorts();
+  }
+
+  async createCohort(actor: CurrentUser, requestId: string | undefined, input: CreateCohortInput) {
+    const cohort = await this.catalog.createCohort(input);
+    await this.auditLogs?.record({
+      action: "cohort.create",
+      actor,
+      targetType: "cohort",
+      targetId: cohort.id,
+      requestId,
+      metadata: { courseIds: cohort.courseIds, status: cohort.status }
+    });
+    return cohort;
+  }
+
+  async updateCohort(actor: CurrentUser, requestId: string | undefined, id: string, input: UpdateCohortInput) {
+    const cohort = await this.catalog.updateCohort(id, input);
+    await this.auditLogs?.record({
+      action: "cohort.update",
+      actor,
+      targetType: "cohort",
+      targetId: cohort.id,
+      requestId,
+      metadata: { changedFields: Object.keys(input) }
+    });
+    return cohort;
+  }
+
+  async deleteCohort(actor: CurrentUser, requestId: string | undefined, id: string) {
+    await this.catalog.deleteCohort(id);
+    await this.auditLogs?.record({
+      action: "cohort.delete",
+      actor,
+      targetType: "cohort",
+      targetId: id,
+      requestId
+    });
   }
 
   async createDepartment(actor: CurrentUser, requestId: string | undefined, input: CreateDepartmentInput) {

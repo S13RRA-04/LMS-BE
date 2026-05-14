@@ -1,6 +1,9 @@
 export type AuditAction =
   | "course.create"
   | "course.update"
+  | "cohort.create"
+  | "cohort.update"
+  | "cohort.delete"
   | "department.create"
   | "department.update"
   | "enrollment.create"

@@ -1,10 +1,12 @@
 import { AppError } from "../../errors/AppError.js";
-import type { Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
+import type { Cohort, Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
 import type {
+  CreateCohortInput,
   CreateCourseInput,
   CreateDepartmentInput,
   CreateEnrollmentInput,
   LmsRepository,
+  UpdateCohortInput,
   UpdateCourseInput,
   UpdateDepartmentInput,
   UpdateEnrollmentInput,
@@ -44,6 +46,18 @@ export class LmsCatalogRepository implements LmsRepository {
       allowSelfEnrollment: true,
       estimatedMinutes: 120,
       ltiToolClientId: "pact-tool",
+      createdAt: now,
+      updatedAt: now
+    }
+  ];
+
+  private readonly cohorts: Cohort[] = [
+    {
+      id: "cohort-pact-demo",
+      name: "PACT Demo Cohort",
+      description: "Default PACT learner group.",
+      courseIds: ["pact"],
+      status: "active",
       createdAt: now,
       updatedAt: now
     }
@@ -91,6 +105,49 @@ export class LmsCatalogRepository implements LmsRepository {
     return this.departments[index];
   }
 
+  async listCohorts() {
+    return this.cohorts;
+  }
+
+  async createCohort(input: CreateCohortInput) {
+    this.requireCourses(input.courseIds);
+    if (this.cohorts.some((cohort) => cohort.id === input.id)) {
+      throw new AppError(409, "COHORT_EXISTS", "Cohort already exists");
+    }
+    const timestamp = new Date().toISOString();
+    const cohort = { ...input, courseIds: uniqueValues(input.courseIds), createdAt: timestamp, updatedAt: timestamp };
+    this.cohorts.push(cohort);
+    return cohort;
+  }
+
+  async updateCohort(id: string, input: UpdateCohortInput) {
+    const index = this.cohorts.findIndex((cohort) => cohort.id === id);
+    if (index === -1) {
+      throw new AppError(404, "COHORT_NOT_FOUND", "Cohort was not found");
+    }
+    if (input.courseIds) {
+      this.requireCourses(input.courseIds);
+    }
+    this.cohorts[index] = {
+      ...this.cohorts[index],
+      ...input,
+      ...(input.courseIds ? { courseIds: uniqueValues(input.courseIds) } : {}),
+      updatedAt: new Date().toISOString()
+    };
+    return this.cohorts[index];
+  }
+
+  async deleteCohort(id: string) {
+    if (this.enrollments.some((enrollment) => enrollment.cohortId === id)) {
+      throw new AppError(409, "COHORT_IN_USE", "Cohort is assigned to one or more enrollments");
+    }
+    const index = this.cohorts.findIndex((cohort) => cohort.id === id);
+    if (index === -1) {
+      throw new AppError(404, "COHORT_NOT_FOUND", "Cohort was not found");
+    }
+    this.cohorts.splice(index, 1);
+  }
+
   async listPublishedCourses() {
     return this.courses.filter((course) => course.status === "published");
   }
@@ -132,6 +189,9 @@ export class LmsCatalogRepository implements LmsRepository {
 
   async createEnrollment(input: CreateEnrollmentInput) {
     await this.requireCourse(input.courseId);
+    if (input.cohortId) {
+      this.requireCohortForCourse(input.cohortId, input.courseId);
+    }
     const enrollment: Enrollment = {
       id: input.id ?? crypto.randomUUID(),
       userId: input.userId,
@@ -155,6 +215,9 @@ export class LmsCatalogRepository implements LmsRepository {
     if (index === -1) {
       throw new AppError(404, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
     }
+    if (input.cohortId) {
+      this.requireCohortForCourse(input.cohortId, this.enrollments[index].courseId);
+    }
     this.enrollments[index] = { ...this.enrollments[index], ...input };
     return this.enrollments[index];
   }
@@ -166,4 +229,21 @@ export class LmsCatalogRepository implements LmsRepository {
     }
     return course;
   }
+
+  private requireCourses(courseIds: string[]) {
+    const missingCourse = uniqueValues(courseIds).find((courseId) => !this.courses.some((course) => course.id === courseId));
+    if (missingCourse) {
+      throw new AppError(400, "COHORT_COURSE_NOT_FOUND", "Cohort references a course that was not found");
+    }
+  }
+
+  private requireCohortForCourse(cohortId: string, courseId: string) {
+    if (!this.cohorts.some((cohort) => cohort.id === cohortId && cohort.status === "active" && cohort.courseIds.includes(courseId))) {
+      throw new AppError(400, "COHORT_NOT_AVAILABLE", "Cohort is not active for this course");
+    }
+  }
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values));
 }

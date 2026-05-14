@@ -1,5 +1,7 @@
-import type { Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
+import type { Cohort, Course, Department, Enrollment, PortalSettings } from "../lmsTypes.js";
 
+export type CreateCohortInput = Omit<Cohort, "createdAt" | "updatedAt">;
+export type UpdateCohortInput = Partial<Omit<Cohort, "id" | "createdAt" | "updatedAt">>;
 export type CreateCourseInput = Omit<Course, "createdAt" | "updatedAt">;
 export type UpdateCourseInput = Partial<Omit<Course, "id" | "createdAt" | "updatedAt">>;
 export type CreateDepartmentInput = Department;
@@ -16,6 +18,10 @@ export interface LmsRepository {
   listDepartments(): Promise<Department[]>;
   createDepartment(input: CreateDepartmentInput): Promise<Department>;
   updateDepartment(id: string, input: UpdateDepartmentInput): Promise<Department>;
+  listCohorts(): Promise<Cohort[]>;
+  createCohort(input: CreateCohortInput): Promise<Cohort>;
+  updateCohort(id: string, input: UpdateCohortInput): Promise<Cohort>;
+  deleteCohort(id: string): Promise<void>;
   listPublishedCourses(): Promise<Course[]>;
   listCoursesForAdmin(): Promise<Course[]>;
   createCourse(input: CreateCourseInput): Promise<Course>;

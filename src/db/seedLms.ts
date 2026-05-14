@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { loadConfig } from "../config/config.js";
 import { closeMongoClient, collectionNames, ensureMongoCollections, getMongoDb } from "./mongo.js";
-import type { Course, Department, Enrollment } from "../lms/lmsTypes.js";
+import type { Cohort, Course, Department, Enrollment } from "../lms/lmsTypes.js";
 
 const config = loadConfig(process.env);
 const now = new Date("2026-05-12T00:00:00.000Z").toISOString();
@@ -38,6 +38,16 @@ const enrollment: Enrollment = {
   enrolledAt: now
 };
 
+const cohort: Cohort = {
+  id: "cohort-pact-demo",
+  name: "PACT Demo Cohort",
+  description: "Default PACT learner group.",
+  courseIds: ["pact"],
+  status: "active",
+  createdAt: now,
+  updatedAt: now
+};
+
 const adminEnrollment: Enrollment = {
   ...enrollment,
   id: "enrollment-pact-admin-demo",
@@ -51,6 +61,7 @@ try {
 
   await db.collection(names.departments).replaceOne({ id: department.id }, department, { upsert: true });
   await db.collection(names.courses).replaceOne({ id: course.id }, course, { upsert: true });
+  await db.collection(names.cohorts).replaceOne({ id: cohort.id }, cohort, { upsert: true });
   await db.collection(names.enrollments).replaceOne({ id: enrollment.id }, enrollment, { upsert: true });
   await db.collection(names.enrollments).replaceOne({ id: adminEnrollment.id }, adminEnrollment, { upsert: true });
 

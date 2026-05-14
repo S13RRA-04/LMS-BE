@@ -7,6 +7,7 @@ export type MongoCollections = {
   portalSettings: string;
   departments: string;
   courses: string;
+  cohorts: string;
   enrollments: string;
   users: string;
   auditLogs: string;
@@ -21,6 +22,7 @@ export function collectionNames(config: AppConfig): MongoCollections {
     portalSettings: `${prefix}portal_settings`,
     departments: `${prefix}departments`,
     courses: `${prefix}courses`,
+    cohorts: `${prefix}cohorts`,
     enrollments: `${prefix}enrollments`,
     users: `${prefix}users`,
     auditLogs: `${prefix}audit_logs`,
@@ -81,6 +83,8 @@ export async function ensureMongoCollections(config: AppConfig) {
   await db.collection(names.courses).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.courses).createIndex({ slug: 1 }, { unique: true });
   await db.collection(names.courses).createIndex({ status: 1, category: 1 });
+  await db.collection(names.cohorts).createIndex({ id: 1 }, { unique: true });
+  await db.collection(names.cohorts).createIndex({ courseIds: 1, status: 1 });
   await db.collection(names.enrollments).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.enrollments).createIndex({ userId: 1, courseId: 1 }, { unique: true });
   await db.collection(names.enrollments).createIndex({ courseId: 1, status: 1 });

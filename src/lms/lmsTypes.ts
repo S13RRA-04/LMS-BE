@@ -9,6 +9,18 @@ export type Department = {
   brandColor?: string;
 };
 
+export type CohortStatus = "active" | "archived";
+
+export type Cohort = {
+  id: string;
+  name: string;
+  description?: string;
+  courseIds: string[];
+  status: CohortStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PortalSettings = {
   id: string;
   name: string;

@@ -14,6 +14,8 @@ import {
   adminUserBulkCreateSchema,
   adminUserCreateSchema,
   adminUserUpdateSchema,
+  cohortCreateSchema,
+  cohortUpdateSchema,
   courseCreateSchema,
   courseUpdateSchema,
   deepLinkLaunchSchema,
@@ -289,6 +291,39 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
         departmentUpdateSchema.parse(await jsonBody(request))
       )
     };
+  }
+
+  if (path === "/lms/admin/cohorts" && request.method === "GET") {
+    requireRole(currentUser, ["admin"]);
+    const { adminExperience } = await services(config);
+    return { body: await adminExperience.listCohorts() };
+  }
+
+  if (path === "/lms/admin/cohorts" && request.method === "POST") {
+    requireRole(currentUser, ["admin"]);
+    const { adminExperience } = await services(config);
+    return { status: 201, body: await adminExperience.createCohort(currentUser, requestId, cohortCreateSchema.parse(await jsonBody(request))) };
+  }
+
+  const cohortMatch = path.match(/^\/lms\/admin\/cohorts\/([^/]+)$/);
+  if (cohortMatch && request.method === "PATCH") {
+    requireRole(currentUser, ["admin"]);
+    const { adminExperience } = await services(config);
+    return {
+      body: await adminExperience.updateCohort(
+        currentUser,
+        requestId,
+        decodeURIComponent(cohortMatch[1]),
+        cohortUpdateSchema.parse(await jsonBody(request))
+      )
+    };
+  }
+
+  if (cohortMatch && request.method === "DELETE") {
+    requireRole(currentUser, ["admin"]);
+    const { adminExperience } = await services(config);
+    await adminExperience.deleteCohort(currentUser, requestId, decodeURIComponent(cohortMatch[1]));
+    return new Response(null, { status: 204 });
   }
 
   if (path === "/lms/admin/enrollments" && request.method === "GET") {
