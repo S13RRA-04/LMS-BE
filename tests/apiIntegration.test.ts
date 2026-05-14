@@ -174,7 +174,11 @@ describe("LMS Worker API integration", () => {
     });
 
     expect(launch.status).toBe(200);
-    await expect(launch.text()).resolves.toContain("https://pact.example.test/lti/launch");
+    const launchHtml = await launch.text();
+    expect(launchHtml).toContain("https://pact.example.test/lti/launch");
+    expect(decodeJwtPayload(extractHiddenInput(launchHtml, "id_token"))["https://purl.imsglobal.org/spec/lti/claim/roles"]).toEqual([
+      "http://purl.imsglobal.org/vocab/lis/v2/membership#Administrator"
+    ]);
   });
 
   it("allows admins to initiate PACT Deep Linking for an LTI course", async () => {
@@ -457,4 +461,20 @@ async function signKeycloakToken(privateKey: KeyLike, config: AppConfig) {
     .setIssuedAt()
     .setExpirationTime("5m")
     .sign(privateKey);
+}
+
+function extractHiddenInput(html: string, name: string) {
+  const match = html.match(new RegExp(`name="${name}" value="([^"]+)"`));
+  if (!match?.[1]) throw new Error(`Hidden input ${name} was not found`);
+  return match[1]
+    .replace(/&quot;/g, "\"")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function decodeJwtPayload(token: string) {
+  const [, payload] = token.split(".");
+  if (!payload) throw new Error("JWT payload was not found");
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
 }

@@ -32,6 +32,11 @@ Run the collection/index check before deploying a new environment or after addin
 
 Protected LMS routes verify Keycloak bearer access tokens server-side using the realm JWKS endpoint.
 
+Production Keycloak must be hosted on durable production infrastructure, not a
+local Docker Desktop container or workstation Cloudflare Tunnel. See
+`docs/keycloak-production.md` for the required production hosting shape and
+cutover checklist.
+
 Required Keycloak config:
 
 - `KEYCLOAK_ISSUER`

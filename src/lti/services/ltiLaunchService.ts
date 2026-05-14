@@ -177,6 +177,7 @@ export class LtiLaunchService {
 }
 
 function ltiRoleFor(role: CurrentUser["role"]) {
+  if (role === "admin") return "http://purl.imsglobal.org/vocab/lis/v2/membership#Administrator";
   if (role === "learner") return "http://purl.imsglobal.org/vocab/lis/v2/membership#Learner";
   return "http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor";
 }
