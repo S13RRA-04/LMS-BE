@@ -11,6 +11,10 @@ import { MongoLmsRepository } from "./lms/repositories/mongoLmsRepository.js";
 import { AdminExperienceService } from "./lms/services/adminExperienceService.js";
 import { LearnerExperienceService } from "./lms/services/learnerExperienceService.js";
 import {
+  accessRequestApproveSchema,
+  accessRequestCreateSchema,
+  accessRequestRejectSchema,
+  accessRequestStatusSchema,
   adminUserBulkCreateSchema,
   adminUserCreateSchema,
   adminUserUpdateSchema,
@@ -41,8 +45,10 @@ import {
   scoreBodySchema,
   tokenBodySchema
 } from "./lti/validators/ltiSchemas.js";
+import { AccessRequestService } from "./users/accessRequestService.js";
 import { AdminUserService } from "./users/adminUserService.js";
 import { KeycloakUserSyncService } from "./users/keycloakUserSyncService.js";
+import { MongoAccessRequestRepository } from "./users/mongoAccessRequestRepository.js";
 import { MongoUserRepository } from "./users/mongoUserRepository.js";
 
 type WorkerEnv = Record<string, string | undefined>;
@@ -186,6 +192,12 @@ async function routeLti(context: RequestContext, path: string): Promise<RouteRes
 
 async function routeLms(context: RequestContext, path: string): Promise<RouteResult> {
   const { request, config, requestId } = context;
+
+  if (path === "/lms/access-requests" && request.method === "POST") {
+    const { accessRequests } = await services(config);
+    return { status: 202, body: await accessRequests.submit(requestId, accessRequestCreateSchema.parse(await jsonBody(request))) };
+  }
+
   const currentUser = await requireCurrentUser(context);
 
   if (path === "/lms/learner/dashboard" && request.method === "GET") {
@@ -402,6 +414,30 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
     return { status: result.failed.length ? 207 : 201, body: result };
   }
 
+  if (path === "/lms/admin/access-requests" && request.method === "GET") {
+    requireRole(currentUser, ["admin"]);
+    const { accessRequests } = await services(config);
+    const status = context.url.searchParams.get("status");
+    return { body: await accessRequests.list(status ? accessRequestStatusSchema.parse(status) : undefined) };
+  }
+
+  const accessRequestMatch = path.match(/^\/lms\/admin\/access-requests\/([^/]+)\/(approve|reject)$/);
+  if (accessRequestMatch && request.method === "POST") {
+    requireRole(currentUser, ["admin"]);
+    const { accessRequests } = await services(config);
+    const id = decodeURIComponent(accessRequestMatch[1]);
+    if (accessRequestMatch[2] === "approve") {
+      return {
+        status: 201,
+        body: await accessRequests.approve(currentUser, requestId, id, accessRequestApproveSchema.parse(await jsonBody(request)))
+      };
+    }
+
+    return {
+      body: await accessRequests.reject(currentUser, requestId, id, accessRequestRejectSchema.parse(await jsonBody(request)))
+    };
+  }
+
   const userMatch = path.match(/^\/lms\/admin\/users\/([^/]+)$/);
   if (userMatch && request.method === "PATCH") {
     requireRole(currentUser, ["admin"]);
@@ -450,13 +486,16 @@ async function services(config: AppConfig) {
   const db = await getMongoDb(config);
   const repository = new MongoLmsRepository(db, config);
   const users = new MongoUserRepository(db, config);
+  const accessRequestRepository = new MongoAccessRequestRepository(db, config);
   const auditLogs = new MongoAuditLogRepository(db, config);
+  const adminUsers = new AdminUserService(new KeycloakAdminClient(config), users, auditLogs);
 
   return {
     repository,
     learnerExperience: new LearnerExperienceService(repository),
     adminExperience: new AdminExperienceService(repository, auditLogs),
-    adminUsers: new AdminUserService(new KeycloakAdminClient(config), users, auditLogs),
+    adminUsers,
+    accessRequests: new AccessRequestService(accessRequestRepository, adminUsers, auditLogs),
     launchService: new LtiLaunchService(
       config,
       new ToolRegistrationRepository(config.registeredTools),
@@ -474,7 +513,13 @@ async function requireCurrentUser(context: RequestContext): Promise<CurrentUser>
   const bearer = extractBearer(context.request.headers.get("authorization"));
   if (bearer) {
     const verified = await new KeycloakAuthService(context.config).verifyAccessToken(bearer);
-    const internalUser = await new MongoUserRepository(await getMongoDb(context.config), context.config).upsertFromKeycloak({
+    const userRepository = new MongoUserRepository(await getMongoDb(context.config), context.config);
+    const existingUser = await userRepository.getByKeycloakSub(verified.keycloakSub ?? verified.id);
+    if (!existingUser) {
+      throw new AppError(403, "USER_NOT_APPROVED", "User access has not been approved");
+    }
+
+    const internalUser = await userRepository.upsertFromKeycloak({
       keycloakSub: verified.keycloakSub ?? verified.id,
       email: verified.email,
       name: verified.name,

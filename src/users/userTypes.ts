@@ -65,3 +65,37 @@ export type UpdateAdminUserInput = {
   enabled?: boolean;
   temporaryPassword?: string;
 };
+
+export type AccessRequestStatus = "pending" | "approved" | "rejected";
+
+export type AccessRequest = {
+  id: string;
+  name: string;
+  email: string;
+  emailNormalized: string;
+  status: AccessRequestStatus;
+  requestedAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  approvedByUserId?: string;
+  approvedUserId?: string;
+  rejectedAt?: string;
+  rejectedByUserId?: string;
+  decisionReason?: string;
+};
+
+export type PublicAccessRequestInput = {
+  name: string;
+  email: string;
+};
+
+export type ApproveAccessRequestInput = {
+  username?: string;
+  role: LmsRole;
+  departmentId?: string;
+  temporaryPassword?: string;
+};
+
+export type RejectAccessRequestInput = {
+  reason?: string;
+};

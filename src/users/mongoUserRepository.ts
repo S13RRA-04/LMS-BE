@@ -44,6 +44,11 @@ export class MongoUserRepository {
     return user ? toAdminUser(user) : undefined;
   }
 
+  async getByKeycloakSub(keycloakSub: string): Promise<AdminUser | undefined> {
+    const user = await this.users().findOne({ keycloakSub, deletedAt: { $exists: false } });
+    return user ? toAdminUser(user) : undefined;
+  }
+
   async markDeleted(id: string): Promise<void> {
     const now = new Date().toISOString();
     await this.users().updateOne({ id }, { $set: { enabled: false, updatedAt: now, deletedAt: now } });

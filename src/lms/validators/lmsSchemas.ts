@@ -102,6 +102,24 @@ export const adminUserUpdateSchema = adminUserCreateSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: "At least one user field is required" });
 
+export const accessRequestCreateSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email().max(255)
+}).strict();
+
+export const accessRequestStatusSchema = z.enum(["pending", "approved", "rejected"]);
+
+export const accessRequestApproveSchema = z.object({
+  username: z.string().min(3).max(120).regex(/^[a-zA-Z0-9._@-]+$/).optional(),
+  role: lmsRoleSchema.default("learner"),
+  departmentId: z.string().min(1).max(120).optional(),
+  temporaryPassword: z.string().min(12).max(256).optional()
+}).strict();
+
+export const accessRequestRejectSchema = z.object({
+  reason: z.string().max(500).optional()
+}).strict();
+
 export const deepLinkLaunchSchema = z.object({
   cohortId: z.string().min(1).max(120).optional()
 }).strict();

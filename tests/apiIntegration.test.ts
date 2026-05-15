@@ -48,8 +48,27 @@ describe("LMS Worker API integration", () => {
     await new Promise<void>((resolve, reject) => jwksServer.close((error) => (error ? reject(error) : resolve())));
   });
 
-  it("upserts the internal user from Keycloak subject and writes audit log for admin course creation", async () => {
+  it("refreshes an approved internal user from Keycloak subject and writes audit log for admin course creation", async () => {
     const token = await signKeycloakToken(privateKey, config);
+    const db = await getMongoDb(config);
+    const names = collectionNames(config);
+    await db.collection(names.users).replaceOne(
+      { keycloakSub: "keycloak-admin-sub" },
+      {
+        id: "approved-admin",
+        keycloakSub: "keycloak-admin-sub",
+        username: "admin",
+        email: "old-admin@example.test",
+        name: "Old Admin",
+        role: "admin",
+        roles: ["admin"],
+        permissions: ["lms_admin"],
+        enabled: true,
+        createdAt: "2026-05-14T00:00:00.000Z",
+        updatedAt: "2026-05-14T00:00:00.000Z"
+      },
+      { upsert: true }
+    );
 
     const response = await api("POST", "/api/v1/lms/admin/courses", {
       headers: {
@@ -73,8 +92,6 @@ describe("LMS Worker API integration", () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({ id: "malware-analysis" });
 
-    const db = await getMongoDb(config);
-    const names = collectionNames(config);
     const user = await db.collection(names.users).findOne({ keycloakSub: "keycloak-admin-sub" });
     expect(user?.email).toBe("admin@example.test");
     expect(user?.role).toBe("admin");
@@ -85,6 +102,17 @@ describe("LMS Worker API integration", () => {
     expect(auditLog?.actorKeycloakSub).toBe("keycloak-admin-sub");
     expect(auditLog?.targetId).toBe("malware-analysis");
     expect(auditLog?.requestId).toBe("integration-request");
+  });
+
+  it("rejects valid Keycloak users that have not been approved into the LMS", async () => {
+    const token = await signKeycloakToken(privateKey, config, { sub: "unapproved-user-sub", email: "unapproved@example.test" });
+
+    const response = await api("GET", "/api/v1/lms/learner/dashboard", {
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "USER_NOT_APPROVED" } });
   });
 
   it("allows enrolled learners to launch an LTI course with cohort context", async () => {
@@ -556,9 +584,9 @@ async function signDeepLinkResponse(privateKey: KeyLike, config: AppConfig) {
     .sign(privateKey);
 }
 
-async function signKeycloakToken(privateKey: KeyLike, config: AppConfig) {
+async function signKeycloakToken(privateKey: KeyLike, config: AppConfig, overrides: { sub?: string; email?: string } = {}) {
   return new SignJWT({
-    email: "admin@example.test",
+    email: overrides.email ?? "admin@example.test",
     name: "Integration Admin",
     realm_access: { roles: ["lms_learner", "lms_admin"] },
     resource_access: { "cetu-lms-api": { roles: ["lms_admin"] } },
@@ -567,7 +595,7 @@ async function signKeycloakToken(privateKey: KeyLike, config: AppConfig) {
     .setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer(config.keycloakIssuer)
     .setAudience(config.keycloakAudience)
-    .setSubject("keycloak-admin-sub")
+    .setSubject(overrides.sub ?? "keycloak-admin-sub")
     .setIssuedAt()
     .setExpirationTime("5m")
     .sign(privateKey);

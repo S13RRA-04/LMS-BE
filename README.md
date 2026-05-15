@@ -85,6 +85,7 @@ These headers are disabled in production. Production requires a valid Keycloak b
 - `GET /api/v1/lms/learner/catalog`
 - `GET /api/v1/lms/learner/transcript`
 - `POST /api/v1/lms/courses/:courseId/launch`
+- `POST /api/v1/lms/access-requests`
 - `GET /api/v1/lms/admin/overview`
 - `GET /api/v1/lms/admin/courses`
 - `POST /api/v1/lms/admin/courses`
@@ -96,10 +97,21 @@ These headers are disabled in production. Production requires a valid Keycloak b
 - `POST /api/v1/lms/admin/users`
 - `PATCH /api/v1/lms/admin/users/:userId`
 - `DELETE /api/v1/lms/admin/users/:userId`
+- `GET /api/v1/lms/admin/access-requests?status=pending`
+- `POST /api/v1/lms/admin/access-requests/:requestId/approve`
+- `POST /api/v1/lms/admin/access-requests/:requestId/reject`
 - `GET /api/v1/lms/admin/enrollments`
 - `POST /api/v1/lms/admin/enrollments`
 - `PATCH /api/v1/lms/admin/enrollments/:enrollmentId`
 - `PATCH /api/v1/lms/admin/portal-settings`
+
+Prospective users request access through `/lms/access-requests` with name and
+email only. These records remain pending in the LMS `access_requests` collection
+until an admin approves or rejects them. Approval provisions the normal
+Keycloak-backed LMS user and marks the request approved; rejection records the
+decision without creating identity. Valid Keycloak bearer tokens are accepted
+only when a non-deleted LMS user projection already exists, so public Keycloak
+registration cannot bypass LMS approval.
 
 Admins enroll users into courses through `/admin/enrollments`. Course enrollments
 may include `cohortId`; learner dashboard and transcript responses include only

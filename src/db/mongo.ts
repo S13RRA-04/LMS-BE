@@ -10,6 +10,7 @@ export type MongoCollections = {
   cohorts: string;
   enrollments: string;
   users: string;
+  accessRequests: string;
   auditLogs: string;
   ltiContentItems: string;
   ltiLineItems: string;
@@ -25,6 +26,7 @@ export function collectionNames(config: AppConfig): MongoCollections {
     cohorts: `${prefix}cohorts`,
     enrollments: `${prefix}enrollments`,
     users: `${prefix}users`,
+    accessRequests: `${prefix}access_requests`,
     auditLogs: `${prefix}audit_logs`,
     ltiContentItems: `${prefix}lti_content_items`,
     ltiLineItems: `${prefix}lti_line_items`,
@@ -92,6 +94,9 @@ export async function ensureMongoCollections(config: AppConfig) {
   await db.collection(names.users).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.users).createIndex({ keycloakSub: 1 }, { unique: true });
   await db.collection(names.users).createIndex({ email: 1 });
+  await db.collection(names.accessRequests).createIndex({ id: 1 }, { unique: true });
+  await db.collection(names.accessRequests).createIndex({ emailNormalized: 1, status: 1 });
+  await db.collection(names.accessRequests).createIndex({ status: 1, requestedAt: -1 });
   await db.collection(names.auditLogs).createIndex({ id: 1 }, { unique: true });
   await db.collection(names.auditLogs).createIndex({ actorUserId: 1, occurredAt: -1 });
   await db.collection(names.auditLogs).createIndex({ action: 1, occurredAt: -1 });
