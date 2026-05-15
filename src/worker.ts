@@ -204,7 +204,21 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
   if (path === "/lms/learner/dashboard" && request.method === "GET") {
     requireRole(currentUser, ["learner", "instructor", "admin"]);
     const { learnerExperience } = await services(config);
-    return { body: await learnerExperience.getDashboard(currentUser) };
+    const dashboard = await learnerExperience.getDashboard(currentUser);
+    const lineItems = new MongoLineItemRepository(await getMongoDb(config), config);
+    const deepLinks = await lineItems.listDeepLinkedContent();
+    const enrollmentByCourse = new Map(dashboard.transcript.map((item) => [item.course.id, item.enrollment]));
+    return {
+      body: {
+        ...dashboard,
+        deepLinks: deepLinks.filter((item) => {
+          if (!item.courseId) return false;
+          const enrollment = enrollmentByCourse.get(item.courseId);
+          if (!enrollment || enrollment.status === "expired" || enrollment.status === "failed") return false;
+          return !item.cohortId || item.cohortId === enrollment.cohortId;
+        })
+      }
+    };
   }
 
   if (path === "/lms/learner/catalog" && request.method === "GET") {
@@ -232,6 +246,32 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
     }
 
     return html(await launchService.createCourseLaunchForm({ course, enrollment: enrollmentBlocksLaunch ? undefined : enrollment, user: currentUser }));
+  }
+
+  const deepLinkedLaunchMatch = path.match(/^\/lms\/deep-links\/([^/]+)\/launch$/);
+  if (deepLinkedLaunchMatch && request.method === "POST") {
+    requireRole(currentUser, ["learner", "instructor", "admin"]);
+    const { repository, launchService } = await services(config);
+    const lineItems = new MongoLineItemRepository(await getMongoDb(config), config);
+    const content = await lineItems.requireDeepLinkedContent(decodeURIComponent(deepLinkedLaunchMatch[1]));
+    if (!content.courseId) {
+      throw new AppError(400, "DEEP_LINK_COURSE_REQUIRED", "Deep linked content is not assigned to an LMS course");
+    }
+    const course = await repository.requireCourse(content.courseId);
+    const enrollment = await repository.getEnrollmentForUserCourse(currentUser.id, course.id);
+    const enrollmentBlocksLaunch = !enrollment || enrollment.status === "expired" || enrollment.status === "failed";
+    if (currentUser.role !== "admin" && enrollmentBlocksLaunch) {
+      throw new AppError(403, "COURSE_ENROLLMENT_REQUIRED", "User is not enrolled in this course");
+    }
+    if (currentUser.role !== "admin" && content.cohortId && content.cohortId !== enrollment?.cohortId) {
+      throw new AppError(403, "COHORT_DEEP_LINK_FORBIDDEN", "Deep linked content is not assigned to this learner cohort");
+    }
+    return html(await launchService.createDeepLinkedContentLaunchForm({
+      course,
+      content,
+      enrollment: enrollmentBlocksLaunch ? undefined : enrollment,
+      user: currentUser
+    }));
   }
 
   if (path === "/lms/admin/overview" && request.method === "GET") {

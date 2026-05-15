@@ -51,6 +51,7 @@ export type DeepLinkedContent = {
   courseId?: string;
   cohortId?: string | null;
   lineItemId?: string;
+  custom?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 };
@@ -85,6 +86,7 @@ export type DeepLinkContentItem = {
   title: string;
   url?: string;
   text?: string;
+  custom?: Record<string, string>;
   lineItem?: {
     label?: string;
     scoreMaximum?: number;

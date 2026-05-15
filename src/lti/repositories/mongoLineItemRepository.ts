@@ -21,6 +21,14 @@ export class MongoLineItemRepository {
     return (await this.contentItems().find().sort({ createdAt: -1 }).toArray()).map(stripId);
   }
 
+  async requireDeepLinkedContent(id: string): Promise<DeepLinkedContent> {
+    const item = await this.contentItems().findOne({ id });
+    if (!item) {
+      throw new AppError(404, "DEEP_LINK_NOT_FOUND", "Deep linked content was not found");
+    }
+    return stripId(item);
+  }
+
   async create(input: Pick<LineItem, "label" | "scoreMaximum" | "resourceId" | "tag">): Promise<LineItem> {
     const now = new Date().toISOString();
     const item: LineItem = {
@@ -95,6 +103,7 @@ export class MongoLineItemRepository {
       title: input.item.title,
       url: input.item.url,
       text: input.item.text,
+      custom: input.item.custom,
       resourceId,
       tag: input.item.lineItem?.tag,
       courseId: input.courseId,

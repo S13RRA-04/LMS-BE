@@ -6,6 +6,7 @@ import type { PlatformKeyService } from "./platformKeyService.js";
 import type { AppConfig } from "../../config/config.js";
 import type { CurrentUser } from "../../auth/currentUser.js";
 import type { Course, Enrollment } from "../../lms/lmsTypes.js";
+import type { DeepLinkedContent } from "../ltiTypes.js";
 
 export type AuthorizationRequest = {
   client_id: string;
@@ -113,6 +114,50 @@ export class LtiLaunchService {
         [LTI_CLAIMS.custom]: {
           course_id: input.course.id,
           cohort_id: contextId
+        }
+      },
+      tool.clientId
+    );
+
+    return renderFormPost(redirectUri, { id_token: idToken });
+  }
+
+  async createDeepLinkedContentLaunchForm(input: { course: Course; content: DeepLinkedContent; enrollment?: Enrollment; user: CurrentUser }) {
+    if (input.course.type !== "lti_tool" || !input.course.ltiToolClientId) {
+      throw new AppError(400, "COURSE_NOT_LTI_TOOL", "Course does not have an LTI tool launch configured");
+    }
+
+    const tool = this.tools.requireByClientId(input.course.ltiToolClientId);
+    const deploymentId = tool.deploymentIds[0];
+    const redirectUri = tool.redirectUris[0];
+    if (!deploymentId || !redirectUri || !input.content.url) {
+      throw new AppError(400, "LTI_TOOL_MISCONFIGURED", "LTI tool or deep linked content is missing launch configuration");
+    }
+
+    const contextId = input.content.cohortId ?? input.enrollment?.cohortId ?? input.course.id;
+    const idToken = await this.keys.signJwt(
+      {
+        sub: input.user.id,
+        nonce: crypto.randomUUID(),
+        name: input.user.name,
+        email: input.user.email,
+        [LTI_CLAIMS.messageType]: "LtiResourceLinkRequest",
+        [LTI_CLAIMS.version]: "1.3.0",
+        [LTI_CLAIMS.deploymentId]: deploymentId,
+        [LTI_CLAIMS.targetLinkUri]: input.content.url,
+        [LTI_CLAIMS.resourceLink]: { id: input.content.resourceId ?? input.content.id, title: input.content.title },
+        [LTI_CLAIMS.roles]: [ltiRoleFor(input.user.role)],
+        [LTI_CLAIMS.context]: { id: contextId, title: input.course.title },
+        [LTI_CLAIMS.lis]: { person_sourcedid: input.user.id },
+        [LTI_CLAIMS.agsEndpoint]: {
+          scope: [LTI_SCOPES.lineItem, LTI_SCOPES.lineItemReadonly, LTI_SCOPES.resultReadonly, LTI_SCOPES.score],
+          lineitems: `${this.config.appBaseUrl}/api/v1/lti/ags/lineitems`,
+          ...(input.content.lineItemId ? { lineitem: `${this.config.appBaseUrl}/api/v1/lti/ags/lineitems/${input.content.lineItemId}` } : {})
+        },
+        [LTI_CLAIMS.custom]: {
+          course_id: input.course.id,
+          cohort_id: contextId,
+          ...(input.content.custom ?? {})
         }
       },
       tool.clientId
