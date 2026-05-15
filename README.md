@@ -108,10 +108,16 @@ These headers are disabled in production. Production requires a valid Keycloak b
 Prospective users request access through `/lms/access-requests` with name and
 email only. These records remain pending in the LMS `access_requests` collection
 until an admin approves or rejects them. Approval provisions the normal
-Keycloak-backed LMS user and marks the request approved; rejection records the
-decision without creating identity. Valid Keycloak bearer tokens are accepted
-only when a non-deleted LMS user projection already exists, so public Keycloak
-registration cannot bypass LMS approval.
+Keycloak-backed LMS user with the selected role, department, and optional
+temporary password, and may create an initial course/cohort enrollment in the
+same workflow. Rejection records the decision without creating identity. The
+access request service calls submitted, approved, and rejected notification
+hooks; the default runtime adapter is no-op until an email provider is
+configured. Valid Keycloak bearer tokens are accepted only when a non-deleted LMS
+user projection already exists, so public Keycloak registration cannot bypass
+LMS approval. If approval creates a user and the selected initial enrollment
+fails unexpectedly, the service attempts a compensating Keycloak/LMS user delete
+and leaves the access request pending for admin review.
 
 Admins enroll users into courses through `/admin/enrollments`. Course enrollments
 may include `cohortId`; learner dashboard and transcript responses include only
@@ -149,6 +155,10 @@ Copy `.env.example` and provide real values:
 - `LTI_PLATFORM_PRIVATE_KEY_PEM`: RSA private key used to sign platform JWTs.
 - `LTI_TOOLS_JSON`: JSON array of registered tool records.
 - `CORS_ORIGINS`: comma-separated frontend origins.
+- `EMAIL_PROVIDER`: `noop` or `resend`. Defaults to `noop`.
+- `EMAIL_FROM`: sender email address for access request notifications when using Resend.
+- `ACCESS_REQUEST_ADMIN_EMAIL`: admin mailbox notified when a request is submitted.
+- `RESEND_API_KEY`: Resend API key. Required only when `EMAIL_PROVIDER=resend`.
 
 For Cloudflare-backed staging, see `docs/cloudflare-staging.md`. The public staging and production API entrypoints are deployed with Wrangler as Cloudflare Workers.
 

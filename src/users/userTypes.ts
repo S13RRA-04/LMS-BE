@@ -94,6 +94,8 @@ export type ApproveAccessRequestInput = {
   role: LmsRole;
   departmentId?: string;
   temporaryPassword?: string;
+  courseId?: string;
+  cohortId?: string;
 };
 
 export type RejectAccessRequestInput = {

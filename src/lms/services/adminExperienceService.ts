@@ -149,6 +149,24 @@ export class AdminExperienceService {
     return enrollment;
   }
 
+  async validateEnrollmentTarget(courseId: string, cohortId?: string) {
+    await this.catalog.requireCourse(courseId);
+    if (cohortId) {
+      await this.catalog.requireActiveCohortForCourse(cohortId, courseId);
+    }
+  }
+
+  async deleteEnrollment(actor: CurrentUser, requestId: string | undefined, id: string) {
+    await this.catalog.deleteEnrollment(id);
+    await this.auditLogs?.record({
+      action: "enrollment.delete",
+      actor,
+      targetType: "enrollment",
+      targetId: id,
+      requestId
+    });
+  }
+
   async updateEnrollment(actor: CurrentUser, requestId: string | undefined, id: string, input: UpdateEnrollmentInput) {
     const enrollment = await this.catalog.updateEnrollment(id, input);
     await this.auditLogs?.record({

@@ -8,6 +8,7 @@ export type AuditAction =
   | "department.update"
   | "enrollment.create"
   | "enrollment.update"
+  | "enrollment.delete"
   | "portal_settings.update"
   | "access_request.create"
   | "access_request.approve"

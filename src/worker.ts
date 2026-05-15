@@ -50,6 +50,7 @@ import { AdminUserService } from "./users/adminUserService.js";
 import { KeycloakUserSyncService } from "./users/keycloakUserSyncService.js";
 import { MongoAccessRequestRepository } from "./users/mongoAccessRequestRepository.js";
 import { MongoUserRepository } from "./users/mongoUserRepository.js";
+import { createAccessRequestNotifier } from "./notifications/accessRequestNotifier.js";
 
 type WorkerEnv = Record<string, string | undefined>;
 
@@ -489,13 +490,14 @@ async function services(config: AppConfig) {
   const accessRequestRepository = new MongoAccessRequestRepository(db, config);
   const auditLogs = new MongoAuditLogRepository(db, config);
   const adminUsers = new AdminUserService(new KeycloakAdminClient(config), users, auditLogs);
+  const adminExperience = new AdminExperienceService(repository, auditLogs);
 
   return {
     repository,
     learnerExperience: new LearnerExperienceService(repository),
-    adminExperience: new AdminExperienceService(repository, auditLogs),
+    adminExperience,
     adminUsers,
-    accessRequests: new AccessRequestService(accessRequestRepository, adminUsers, auditLogs),
+    accessRequests: new AccessRequestService(accessRequestRepository, adminUsers, adminExperience, createAccessRequestNotifier(config), auditLogs),
     launchService: new LtiLaunchService(
       config,
       new ToolRegistrationRepository(config.registeredTools),

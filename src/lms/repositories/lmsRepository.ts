@@ -31,6 +31,7 @@ export interface LmsRepository {
   getEnrollmentForUserCourse(userId: string, courseId: string): Promise<Enrollment | undefined>;
   createEnrollment(input: CreateEnrollmentInput): Promise<Enrollment>;
   updateEnrollment(id: string, input: UpdateEnrollmentInput): Promise<Enrollment>;
+  deleteEnrollment(id: string): Promise<void>;
   requireCourse(courseId: string): Promise<Course>;
   requireActiveCohortForCourse(cohortId: string, courseId: string): Promise<Cohort>;
 }

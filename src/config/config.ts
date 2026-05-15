@@ -21,6 +21,10 @@ const envSchema = z.object({
   KEYCLOAK_ADMIN_USERNAME: z.string().min(1).optional(),
   KEYCLOAK_ADMIN_PASSWORD: z.string().min(1).optional(),
   KEYCLOAK_WEBHOOK_SECRET: z.string().min(24).optional(),
+  EMAIL_PROVIDER: z.enum(["noop", "resend"]).default("noop"),
+  EMAIL_FROM: z.string().email().optional(),
+  ACCESS_REQUEST_ADMIN_EMAIL: z.string().email().optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
   LTI_ISSUER: z.string().url(),
   LTI_PLATFORM_KID: z.string().min(1),
   LTI_PLATFORM_PRIVATE_KEY_PEM: z.string().min(1),
@@ -64,6 +68,10 @@ export type AppConfig = {
   keycloakAdminUsername?: string;
   keycloakAdminPassword?: string;
   keycloakWebhookSecret?: string;
+  emailProvider: "noop" | "resend";
+  emailFrom?: string;
+  accessRequestAdminEmail?: string;
+  resendApiKey?: string;
   ltiPlatformKid: string;
   ltiPlatformPrivateKeyPem: string;
   registeredTools: RegisteredToolConfig[];
@@ -79,6 +87,7 @@ export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
   const issuer = parsed.KEYCLOAK_ISSUER.replace(/\/$/, "");
   const issuerUrl = new URL(issuer);
   const issuerRealm = issuerUrl.pathname.split("/").filter(Boolean).at(-1) ?? "cetu";
+  assertEmailConfig(parsed);
 
   return {
     env: parsed.NODE_ENV,
@@ -100,12 +109,32 @@ export function loadConfig(source: NodeJS.ProcessEnv): AppConfig {
     keycloakAdminUsername: parsed.KEYCLOAK_ADMIN_USERNAME,
     keycloakAdminPassword: parsed.KEYCLOAK_ADMIN_PASSWORD,
     keycloakWebhookSecret: parsed.KEYCLOAK_WEBHOOK_SECRET,
+    emailProvider: parsed.EMAIL_PROVIDER,
+    emailFrom: parsed.EMAIL_FROM,
+    accessRequestAdminEmail: parsed.ACCESS_REQUEST_ADMIN_EMAIL,
+    resendApiKey: parsed.RESEND_API_KEY,
     ltiIssuer: parsed.LTI_ISSUER.replace(/\/$/, ""),
     ltiPlatformKid: parsed.LTI_PLATFORM_KID,
     ltiPlatformPrivateKeyPem: parsed.LTI_PLATFORM_PRIVATE_KEY_PEM.replace(/\\n/g, "\n"),
     registeredTools: tools,
     corsOrigins: parsed.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
   };
+}
+
+function assertEmailConfig(parsed: z.infer<typeof envSchema>) {
+  if (parsed.EMAIL_PROVIDER !== "resend") {
+    return;
+  }
+
+  const missing = [
+    ["RESEND_API_KEY", parsed.RESEND_API_KEY],
+    ["EMAIL_FROM", parsed.EMAIL_FROM],
+    ["ACCESS_REQUEST_ADMIN_EMAIL", parsed.ACCESS_REQUEST_ADMIN_EMAIL]
+  ].filter(([, value]) => !value).map(([name]) => name);
+
+  if (missing.length) {
+    throw new Error(`EMAIL_PROVIDER=resend requires ${missing.join(", ")}.`);
+  }
 }
 
 function buildMongoUri(mongoUri: string, username?: string, password?: string) {

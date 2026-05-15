@@ -222,6 +222,14 @@ export class LmsCatalogRepository implements LmsRepository {
     return this.enrollments[index];
   }
 
+  async deleteEnrollment(id: string) {
+    const index = this.enrollments.findIndex((enrollment) => enrollment.id === id);
+    if (index === -1) {
+      throw new AppError(404, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
+    }
+    this.enrollments.splice(index, 1);
+  }
+
   async requireCourse(courseId: string) {
     const course = this.courses.find((candidate) => candidate.id === courseId);
     if (!course) {

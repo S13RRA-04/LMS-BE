@@ -1,6 +1,8 @@
 import type { CurrentUser } from "../auth/currentUser.js";
 import type { MongoAuditLogRepository } from "../audit/mongoAuditLogRepository.js";
 import { AppError } from "../errors/AppError.js";
+import type { AdminExperienceService } from "../lms/services/adminExperienceService.js";
+import type { AccessRequestNotifier } from "../notifications/accessRequestNotifier.js";
 import type { AdminUserService } from "./adminUserService.js";
 import type { MongoAccessRequestRepository } from "./mongoAccessRequestRepository.js";
 import type {
@@ -21,6 +23,8 @@ export class AccessRequestService {
   constructor(
     private readonly requests: MongoAccessRequestRepository,
     private readonly adminUsers: AdminUserService,
+    private readonly adminExperience?: AdminExperienceService,
+    private readonly notifier?: AccessRequestNotifier,
     private readonly auditLogs?: MongoAuditLogRepository
   ) {}
 
@@ -34,6 +38,7 @@ export class AccessRequestService {
       requestId,
       metadata: { email: accessRequest.emailNormalized }
     });
+    await this.notify("submitted", requestId, accessRequest.id, () => this.notifier?.accessRequestSubmitted({ accessRequest }));
     return accessRequest;
   }
 
@@ -47,6 +52,10 @@ export class AccessRequestService {
       throw new AppError(accessRequest ? 409 : 404, accessRequest ? "ACCESS_REQUEST_NOT_PENDING" : "ACCESS_REQUEST_NOT_FOUND", accessRequest ? "Access request is not pending" : "Access request was not found");
     }
 
+    if (input.courseId && this.adminExperience) {
+      await this.adminExperience.validateEnrollmentTarget(input.courseId, input.cohortId);
+    }
+
     const user = await this.adminUsers.createUser(actor, requestId, {
       username: input.username?.trim() || usernameFromEmail(accessRequest.email),
       email: accessRequest.email,
@@ -57,16 +66,42 @@ export class AccessRequestService {
       temporaryPassword: input.temporaryPassword
     });
 
-    const approved = await this.requests.approve(id, { actorUserId: actor.id, approvedUserId: user.id });
+    let enrollment: Awaited<ReturnType<AdminExperienceService["createEnrollment"]>> | undefined;
+    try {
+      enrollment = input.courseId && this.adminExperience
+        ? await this.adminExperience.createEnrollment(actor, requestId, {
+            userId: user.id,
+            courseId: input.courseId,
+            cohortId: input.cohortId,
+            status: "not_started",
+            progressPercent: 0
+          })
+        : undefined;
+    } catch (error) {
+      await this.rollbackCreatedUser(actor, requestId, user.id, error);
+      throw error;
+    }
+
+    let approved: typeof accessRequest;
+    try {
+      approved = await this.requests.approve(id, { actorUserId: actor.id, approvedUserId: user.id });
+    } catch (error) {
+      if (enrollment) {
+        await this.rollbackCreatedEnrollment(actor, requestId, enrollment.id, error);
+      }
+      await this.rollbackCreatedUser(actor, requestId, user.id, error);
+      throw error;
+    }
     await this.auditLogs?.record({
       action: "access_request.approve",
       actor,
       targetType: "access_request",
       targetId: approved.id,
       requestId,
-      metadata: { approvedUserId: user.id, role: user.role }
+      metadata: { approvedUserId: user.id, role: user.role, enrollmentId: enrollment?.id }
     });
-    return { accessRequest: approved, user };
+    await this.notify("approved", requestId, approved.id, () => this.notifier?.accessRequestApproved({ accessRequest: approved, user, enrollment }));
+    return { accessRequest: approved, user, enrollment };
   }
 
   async reject(actor: CurrentUser, requestId: string | undefined, id: string, input: RejectAccessRequestInput) {
@@ -79,10 +114,52 @@ export class AccessRequestService {
       requestId,
       metadata: { reason: input.reason }
     });
+    await this.notify("rejected", requestId, rejected.id, () => this.notifier?.accessRequestRejected({ accessRequest: rejected }));
     return rejected;
+  }
+
+  private async rollbackCreatedEnrollment(actor: CurrentUser, requestId: string | undefined, enrollmentId: string, originalError: unknown) {
+    try {
+      await this.adminExperience?.deleteEnrollment(actor, requestId, enrollmentId);
+    } catch (rollbackError) {
+      logAccessRequestSideEffectFailure("enrollment_rollback", requestId, enrollmentId, rollbackError, originalError);
+    }
+  }
+
+  private async rollbackCreatedUser(actor: CurrentUser, requestId: string | undefined, userId: string, originalError: unknown) {
+    try {
+      await this.adminUsers.deleteUser(actor, requestId, userId);
+    } catch (rollbackError) {
+      logAccessRequestSideEffectFailure("user_rollback", requestId, userId, rollbackError, originalError);
+    }
+  }
+
+  private async notify(kind: "submitted" | "approved" | "rejected", requestId: string | undefined, accessRequestId: string, action: () => Promise<void> | undefined) {
+    try {
+      await action();
+    } catch (error) {
+      logAccessRequestSideEffectFailure(`email_${kind}`, requestId, accessRequestId, error);
+    }
   }
 }
 
 function usernameFromEmail(email: string) {
   return email.trim().toLowerCase().replace(/@.*$/, "").replace(/[^a-z0-9._-]/g, ".").replace(/\.+/g, ".").replace(/^\.+|\.+$/g, "") || `user-${crypto.randomUUID()}`;
+}
+
+function logAccessRequestSideEffectFailure(
+  sideEffect: string,
+  requestId: string | undefined,
+  targetId: string,
+  error: unknown,
+  originalError?: unknown
+) {
+  console.warn(JSON.stringify({
+    event: "access_request_side_effect_failed",
+    sideEffect,
+    requestId,
+    targetId,
+    error: error instanceof Error ? error.message : "Unknown side effect failure",
+    originalError: originalError instanceof Error ? originalError.message : undefined
+  }));
 }

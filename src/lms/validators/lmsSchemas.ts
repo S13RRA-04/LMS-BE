@@ -113,7 +113,9 @@ export const accessRequestApproveSchema = z.object({
   username: z.string().min(3).max(120).regex(/^[a-zA-Z0-9._@-]+$/).optional(),
   role: lmsRoleSchema.default("learner"),
   departmentId: z.string().min(1).max(120).optional(),
-  temporaryPassword: z.string().min(12).max(256).optional()
+  temporaryPassword: z.string().min(12).max(256).optional(),
+  courseId: z.string().min(1).max(120).optional(),
+  cohortId: z.string().min(1).max(120).optional()
 }).strict();
 
 export const accessRequestRejectSchema = z.object({

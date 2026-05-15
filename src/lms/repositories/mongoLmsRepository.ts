@@ -179,6 +179,13 @@ export class MongoLmsRepository implements LmsRepository {
     return this.updateRequired(this.enrollments(), id, input, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
   }
 
+  async deleteEnrollment(id: string): Promise<void> {
+    const result = await this.enrollments().deleteOne({ id });
+    if (!result.deletedCount) {
+      throw new AppError(404, "ENROLLMENT_NOT_FOUND", "Enrollment was not found");
+    }
+  }
+
   async requireCourse(courseId: string): Promise<Course> {
     const course = await this.courses().findOne({ id: courseId });
     if (!course) {
