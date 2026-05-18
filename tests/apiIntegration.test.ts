@@ -270,7 +270,7 @@ describe("LMS Worker API integration", () => {
       "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiDeepLinkingRequest",
       "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
       "https://purl.imsglobal.org/spec/lti/claim/deployment_id": "pact-course-deployment",
-      "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": "https://pact.example.test/lti/launch",
+      "https://purl.imsglobal.org/spec/lti/claim/target_link_uri": "https://pact.example.test/lti/deep-link",
       "https://purl.imsglobal.org/spec/lti/claim/context": { id: "cohort-alpha", title: "PACT Deep Link" },
       "https://purl.imsglobal.org/spec/lti/claim/custom": {
         course_id: "pact-deep-link",

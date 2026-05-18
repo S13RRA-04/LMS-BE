@@ -144,7 +144,14 @@ export class AccessRequestService {
 }
 
 function usernameFromEmail(email: string) {
-  return email.trim().toLowerCase().replace(/@.*$/, "").replace(/[^a-z0-9._-]/g, ".").replace(/\.+/g, ".").replace(/^\.+|\.+$/g, "") || `user-${crypto.randomUUID()}`;
+  const username = email
+    .trim()
+    .toLowerCase()
+    .replace(/@.*$/, "")
+    .replace(/[^a-z0-9._-]/g, ".")
+    .replace(/\.+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return username.length >= 3 ? username : `user-${username || crypto.randomUUID()}`;
 }
 
 function logAccessRequestSideEffectFailure(

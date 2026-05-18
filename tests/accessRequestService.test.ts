@@ -107,6 +107,28 @@ describe("LMS access requests", () => {
     expect(result).toEqual({ accessRequest: approvedRequest, user: expect.objectContaining({ id: "user-1" }), enrollment: expect.objectContaining({ id: "enrollment-1" }) });
   });
 
+  it("derives a schema-safe username from short email local parts", async () => {
+    const shortEmailRequest = { ...pendingRequest, email: "ab@example.test", emailNormalized: "ab@example.test" };
+    const requests = {
+      getById: vi.fn().mockResolvedValue(shortEmailRequest),
+      approve: vi.fn().mockResolvedValue({ ...shortEmailRequest, status: "approved" as const, approvedUserId: "user-1" })
+    };
+    const adminUsers = {
+      createUser: vi.fn().mockResolvedValue({ id: "user-1", email: "ab@example.test", role: "learner" })
+    };
+    const service = new AccessRequestService(
+      requests as unknown as MongoAccessRequestRepository,
+      adminUsers as unknown as AdminUserService
+    );
+
+    await service.approve(actor, "request-admin", "request-1", { role: "learner" });
+
+    expect(adminUsers.createUser).toHaveBeenCalledWith(actor, "request-admin", expect.objectContaining({
+      username: "user-ab",
+      email: "ab@example.test"
+    }));
+  });
+
   it("rejects pending requests and calls the rejection notification hook", async () => {
     const rejectedRequest = { ...pendingRequest, status: "rejected" as const, decisionReason: "Not eligible" };
     const requests = { reject: vi.fn().mockResolvedValue(rejectedRequest) };

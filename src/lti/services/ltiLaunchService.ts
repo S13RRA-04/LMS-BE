@@ -233,7 +233,7 @@ export class LtiLaunchService {
         [LTI_CLAIMS.messageType]: "LtiDeepLinkingRequest",
         [LTI_CLAIMS.version]: "1.3.0",
         [LTI_CLAIMS.deploymentId]: deploymentId,
-        [LTI_CLAIMS.targetLinkUri]: tool.targetLinkUri,
+        [LTI_CLAIMS.targetLinkUri]: redirectUri,
         [LTI_CLAIMS.roles]: [ltiRoleFor(input.user.role)],
         [LTI_CLAIMS.context]: { id: contextId, title: input.course.title },
         [LTI_CLAIMS.lis]: { person_sourcedid: input.user.id },
