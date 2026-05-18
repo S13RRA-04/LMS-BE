@@ -184,7 +184,8 @@ async function routeLti(context: RequestContext, path: string): Promise<RouteRes
   const scoreMatch = path.match(/^\/lti\/ags\/lineitems\/([^/]+)\/scores$/);
   if (scoreMatch && request.method === "POST") {
     const scopes = await requireLtiAccessToken(context);
-    const agsService = new AgsService(new MongoLineItemRepository(await getMongoDb(config), config));
+    const db = await getMongoDb(config);
+    const agsService = new AgsService(new MongoLineItemRepository(db, config), new MongoLmsRepository(db, config));
     return {
       status: 201,
       body: await agsService.submitScore(scopes, decodeURIComponent(scoreMatch[1]), scoreBodySchema.parse(await jsonBody(request)))
@@ -435,7 +436,12 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
   if (path === "/lms/admin/ags/grades" && request.method === "GET") {
     requireRole(currentUser, ["admin"]);
     const lineItems = new MongoLineItemRepository(await getMongoDb(config), config);
-    return { body: await new AgsService(lineItems).listAdminGradebook() };
+    return {
+      body: await new AgsService(lineItems).listAdminGradebook({
+        courseId: context.url.searchParams.get("courseId") ?? undefined,
+        cohortId: context.url.searchParams.get("cohortId") ?? undefined
+      })
+    };
   }
 
   if (path === "/lms/admin/users" && request.method === "GET") {
