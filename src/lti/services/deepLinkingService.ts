@@ -53,7 +53,7 @@ export class DeepLinkingService {
 
 function cohortIdForDeepLinkedItem(item: DeepLinkContentItem, cohortId: string | undefined) {
   const tag = item.lineItem?.tag ?? item.type;
-  return tag === "challenge" || item.custom?.content_id ? cohortId : undefined;
+  return tag === "challenge" || tag === "workshop" || item.custom?.content_id ? cohortId : undefined;
 }
 
 function parseDeepLinkData(value: unknown) {

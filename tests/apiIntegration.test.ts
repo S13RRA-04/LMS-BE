@@ -446,7 +446,7 @@ describe("LMS Worker API integration", () => {
 
     expect(accepted.status).toBe(200);
     await expect(accepted.json()).resolves.toMatchObject({
-      count: 2,
+      count: 3,
       accepted: [
         {
           toolClientId: "pact-tool",
@@ -456,6 +456,12 @@ describe("LMS Worker API integration", () => {
         {
           toolClientId: "pact-tool",
           title: "PACT Challenges",
+          courseId: "pact",
+          cohortId: "cohort-alpha"
+        },
+        {
+          toolClientId: "pact-tool",
+          title: "PACT Workshops",
           courseId: "pact",
           cohortId: "cohort-alpha"
         }
@@ -473,11 +479,13 @@ describe("LMS Worker API integration", () => {
     };
     expect(body.contentItems).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: "PACT Modules", cohortId: null }),
-      expect.objectContaining({ title: "PACT Challenges", cohortId: "cohort-alpha" })
+      expect.objectContaining({ title: "PACT Challenges", cohortId: "cohort-alpha" }),
+      expect.objectContaining({ title: "PACT Workshops", cohortId: "cohort-alpha" })
     ]));
     expect(body.lineItems).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: "PACT Modules", resourceId: "pact-module-hub", tag: "module", cohortId: null }),
-      expect.objectContaining({ label: "PACT Challenges", scoreMaximum: 100, resourceId: "pact-challenge-hub", tag: "challenge", cohortId: "cohort-alpha" })
+      expect.objectContaining({ label: "PACT Challenges", scoreMaximum: 100, resourceId: "pact-challenge-hub", tag: "challenge", cohortId: "cohort-alpha" }),
+      expect.objectContaining({ label: "PACT Workshops", scoreMaximum: 100, resourceId: "pact-workshop-hub", tag: "workshop", cohortId: "cohort-alpha" })
     ]));
     expect(JSON.stringify(body).toLowerCase()).not.toContain("squad");
   });
@@ -570,6 +578,17 @@ async function signDeepLinkResponse(privateKey: KeyLike, config: AppConfig) {
           scoreMaximum: 100,
           resourceId: "pact-challenge-hub",
           tag: "challenge"
+        }
+      },
+      {
+        type: "ltiResourceLink",
+        title: "PACT Workshops",
+        url: "https://pact.example.test/launch/workshop",
+        lineItem: {
+          label: "PACT Workshops",
+          scoreMaximum: 100,
+          resourceId: "pact-workshop-hub",
+          tag: "workshop"
         }
       }
     ],
