@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/worker.js";
 import { closeMongoClient, ensureMongoCollections } from "../src/db/mongo.js";
 import { loadConfig } from "../src/config/config.js";
+import { collectionNames, getMongoDb } from "../src/db/mongo.js";
 
 describe("LMS Cloudflare Worker integration", () => {
   let mongo: MongoMemoryServer;
@@ -58,6 +59,24 @@ describe("LMS Cloudflare Worker integration", () => {
     await expect(response.json()).resolves.toMatchObject({ ok: true, runtime: "cloudflare-workers" });
   });
 
+  it("keeps CORS headers on configuration failures", async () => {
+    const response = await worker.fetch(
+      new Request("https://lms-worker.example.test/api/v1/lms/admin/access-requests/request-1/approve", {
+        method: "POST",
+        headers: {
+          origin: "https://lms.example.test",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ role: "learner" })
+      }),
+      { ...env, MONGO_DB_NAME: "PACT_V4" }
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://lms.example.test");
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+  });
+
   it("uses Mongo-backed services for admin course creation", async () => {
     const response = await worker.fetch(
       new Request("https://lms-worker.example.test/api/v1/lms/admin/courses", {
@@ -87,6 +106,35 @@ describe("LMS Cloudflare Worker integration", () => {
 
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({ id: "worker-pact", title: "Worker PACT" });
+  });
+
+  it("returns CORS headers for admin DELETE requests", async () => {
+    const config = loadConfig(env);
+    const db = await getMongoDb(config);
+    const cohortsCollection = db.collection(collectionNames(config).cohorts);
+    await cohortsCollection.insertOne({
+      id: "delete-cohort-1",
+      courseIds: [],
+      title: "Delete Cohort",
+      status: "draft",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    const response = await worker.fetch(
+      new Request("https://lms-worker.example.test/api/v1/lms/admin/cohorts/delete-cohort-1", {
+        method: "DELETE",
+        headers: {
+          origin: "https://lms.example.test",
+          "x-dev-user-id": "admin-user",
+          "x-dev-user-roles": "admin"
+        }
+      }),
+      env
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://lms.example.test");
   });
 
   it("enforces enrollment for learner LTI launches through the Worker", async () => {

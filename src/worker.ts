@@ -84,24 +84,26 @@ const keycloakEventSchema = z
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-    const config = loadConfig(env as NodeJS.ProcessEnv);
-    const context: RequestContext = {
-      request,
-      config,
-      requestId,
-      url: new URL(request.url)
-    };
-
-    if (request.method === "OPTIONS") {
-      return withCors(new Response(null, { status: 204 }), config, request);
-    }
+    let config: AppConfig | undefined;
 
     try {
+      config = loadConfig(env as NodeJS.ProcessEnv);
+      const context: RequestContext = {
+        request,
+        config,
+        requestId,
+        url: new URL(request.url)
+      };
+
+      if (request.method === "OPTIONS") {
+        return withCors(new Response(null, { status: 204 }), config, request);
+      }
+
       const result = await route(context);
       return withCors(toResponse(result), config, request);
     } catch (error) {
       logError(error, requestId, request);
-      return withCors(errorResponse(error, requestId), config, request);
+      return withCors(errorResponse(error, requestId), config ?? corsOnlyConfig(env), request);
     }
   }
 } satisfies ExportedHandler<WorkerEnv>;
@@ -700,7 +702,7 @@ function withCors(response: Response, config: AppConfig, request: Request) {
   const headers = new Headers(response.headers);
   const origin = request.headers.get("origin");
 
-  if (origin && config.corsOrigins.includes(origin)) {
+  if (origin && (config.corsOrigins.length === 0 || config.corsOrigins.includes(origin))) {
     headers.set("access-control-allow-origin", origin);
     headers.set("access-control-allow-credentials", "true");
   }
@@ -714,6 +716,32 @@ function withCors(response: Response, config: AppConfig, request: Request) {
     statusText: response.statusText,
     headers
   });
+}
+
+function corsOnlyConfig(env: WorkerEnv): AppConfig {
+  return {
+    env: "production",
+    port: 0,
+    appBaseUrl: "",
+    ltiIssuer: "",
+    mongoUri: "",
+    mongoDbName: "",
+    mongoCollectionPrefix: "",
+    keycloakIssuer: "",
+    keycloakAudience: "",
+    keycloakJwksUri: "",
+    keycloakAdminRealm: "",
+    keycloakAdminTokenRealm: "",
+    emailProvider: "noop",
+    ltiPlatformKid: "",
+    ltiPlatformPrivateKeyPem: "",
+    registeredTools: [],
+    corsOrigins: parseCorsOrigins(env.CORS_ORIGINS)
+  };
+}
+
+function parseCorsOrigins(value: string | undefined) {
+  return (value ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
 }
 
 function extractBearer(header: string | null) {

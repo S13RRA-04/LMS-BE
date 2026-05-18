@@ -75,6 +75,54 @@ describe("LMS admin user management", () => {
     expect(user).toMatchObject({ id: "internal-new-user", email: "new@example.test" });
   });
 
+  it("syncs an existing Keycloak user when a local user is missing during lookup by email", async () => {
+    const keycloak = {
+      findUserByEmail: vi.fn().mockResolvedValue({
+        keycloakSub: "keycloak-existing-sub",
+        username: "pending",
+        email: "pending@example.test",
+        name: "Pending Learner",
+        role: "learner",
+        permissions: ["lms_learner"],
+        departmentId: "cyber-training",
+        enabled: true
+      })
+    };
+    const syncedUser = {
+      id: "user-existing",
+      keycloakSub: "keycloak-existing-sub",
+      username: "pending",
+      email: "pending@example.test",
+      name: "Pending Learner",
+      role: "learner"
+    };
+    const users = {
+      getByEmail: vi.fn().mockResolvedValue(undefined),
+      upsertFromKeycloak: vi.fn().mockResolvedValue(syncedUser)
+    };
+    const service = new AdminUserService(
+      keycloak as unknown as KeycloakAdminClient,
+      users as unknown as MongoUserRepository
+    );
+
+    const result = await service.findUserByEmail("pending@example.test");
+
+    expect(keycloak.findUserByEmail).toHaveBeenCalledWith("pending@example.test");
+    expect(users.upsertFromKeycloak).toHaveBeenCalledWith({
+      keycloakSub: "keycloak-existing-sub",
+      username: "pending",
+      email: "pending@example.test",
+      name: "Pending Learner",
+      role: "learner",
+      roles: ["learner"],
+      permissions: ["lms_learner"],
+      departmentId: "cyber-training",
+      enabled: true,
+      lastLoginAt: undefined
+    });
+    expect(result).toBe(syncedUser);
+  });
+
   it("bulk creates valid users and reports per-row failures", async () => {
     const keycloak = {
       createUser: vi
@@ -126,6 +174,25 @@ describe("LMS admin user management", () => {
 
     await service.deleteUser(actor, "request-2", "learner-1");
 
+    expect(keycloak.deleteUser).toHaveBeenCalledWith("keycloak-learner-1");
+    expect(users.markDeleted).toHaveBeenCalledWith("learner-1");
+    expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.delete", targetId: "learner-1" }));
+  });
+
+  it("deletes users by Keycloak subject when the route parameter is a Keycloak id", async () => {
+    const keycloak = { deleteUser: vi.fn().mockResolvedValue(undefined) };
+    const users = {
+      getById: vi.fn().mockResolvedValue(undefined),
+      getByKeycloakSub: vi.fn().mockResolvedValue({ id: "learner-1", keycloakSub: "keycloak-learner-1" }),
+      markDeleted: vi.fn().mockResolvedValue(undefined)
+    };
+    const auditLogs = { record: vi.fn().mockResolvedValue(undefined) };
+    const service = new AdminUserService(keycloak as unknown as KeycloakAdminClient, users as unknown as MongoUserRepository, auditLogs as never);
+
+    await service.deleteUser(actor, "request-3", "keycloak-learner-1");
+
+    expect(users.getById).toHaveBeenCalledWith("keycloak-learner-1");
+    expect(users.getByKeycloakSub).toHaveBeenCalledWith("keycloak-learner-1");
     expect(keycloak.deleteUser).toHaveBeenCalledWith("keycloak-learner-1");
     expect(users.markDeleted).toHaveBeenCalledWith("learner-1");
     expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.delete", targetId: "learner-1" }));

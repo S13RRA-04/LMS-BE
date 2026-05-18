@@ -49,6 +49,11 @@ export class KeycloakAdminClient {
     const response = await this.requestResponse("/users", {
       method: "POST",
       body: this.userPayload(input)
+    }).catch((error: unknown) => {
+      if (error instanceof AppError && error.code === "KEYCLOAK_ADMIN_CONFLICT") {
+        throw new AppError(409, "USER_EXISTS", "User already exists");
+      }
+      throw error;
     });
 
     const location = response.headers.get("location");
@@ -84,11 +89,25 @@ export class KeycloakAdminClient {
   }
 
   async deleteUser(keycloakSub: string): Promise<void> {
-    await this.request(`/users/${encodeURIComponent(keycloakSub)}`, { method: "DELETE" });
+    try {
+      await this.request(`/users/${encodeURIComponent(keycloakSub)}`, { method: "DELETE" });
+    } catch (error: unknown) {
+      if (error instanceof AppError && error.code === "KEYCLOAK_ADMIN_NOT_FOUND") {
+        return;
+      }
+      throw error;
+    }
   }
 
   async getUser(keycloakSub: string): Promise<KeycloakSyncedUser> {
     return this.toSyncedUser(await this.getRawUser(keycloakSub));
+  }
+
+  async findUserByEmail(email: string): Promise<KeycloakSyncedUser | undefined> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const users = await this.request<KeycloakUser[]>(`/users?exact=true&email=${encodeURIComponent(normalizedEmail)}&max=2`);
+    const user = users.find((item) => item.email?.toLowerCase() === normalizedEmail) ?? users[0];
+    return user ? this.toSyncedUser(user) : undefined;
   }
 
   private async getRawUser(keycloakSub: string): Promise<KeycloakUser> {
@@ -187,6 +206,12 @@ export class KeycloakAdminClient {
     });
 
     if (!response.ok) {
+      if (response.status === 409) {
+        throw new AppError(409, "KEYCLOAK_ADMIN_CONFLICT", "Keycloak admin request conflicted with an existing resource");
+      }
+      if (response.status === 404) {
+        throw new AppError(404, "KEYCLOAK_ADMIN_NOT_FOUND", "Keycloak admin resource was not found");
+      }
       throw new AppError(502, "KEYCLOAK_ADMIN_REQUEST_FAILED", "Keycloak admin request failed");
     }
 

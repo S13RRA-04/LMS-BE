@@ -40,7 +40,28 @@ export class AdminUserService {
   }
 
   async findUserByEmail(email: string) {
-    return this.users.getByEmail(email);
+    const existing = await this.users.getByEmail(email);
+    if (existing) {
+      return existing;
+    }
+
+    const syncedUser = await this.keycloak.findUserByEmail(email);
+    if (!syncedUser) {
+      return undefined;
+    }
+
+    return this.users.upsertFromKeycloak({
+      keycloakSub: syncedUser.keycloakSub,
+      username: syncedUser.username,
+      email: syncedUser.email,
+      name: syncedUser.name,
+      role: syncedUser.role,
+      roles: [syncedUser.role],
+      permissions: syncedUser.permissions,
+      departmentId: syncedUser.departmentId,
+      enabled: syncedUser.enabled,
+      lastLoginAt: undefined
+    });
   }
 
   async createUser(actor: CurrentUser, requestId: string | undefined, input: CreateAdminUserInput) {
@@ -136,19 +157,21 @@ export class AdminUserService {
     if (actor.id === id) {
       throw new AppError(400, "CANNOT_DELETE_SELF", "Admins cannot delete their own user");
     }
-
-    const existing = await this.users.getById(id);
+    let existing = await this.users.getById(id);
+    if (!existing) {
+      existing = await this.users.getByKeycloakSub(id);
+    }
     if (!existing) {
       throw new AppError(404, "USER_NOT_FOUND", "User was not found");
     }
 
     await this.keycloak.deleteUser(existing.keycloakSub);
-    await this.users.markDeleted(id);
+    await this.users.markDeleted(existing.id);
     await this.auditLogs?.record({
       action: "user.delete",
       actor,
       targetType: "user",
-      targetId: id,
+      targetId: existing.id,
       requestId,
       metadata: { keycloakSub: existing.keycloakSub }
     });
