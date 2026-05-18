@@ -6,6 +6,32 @@ import type { MongoUserRepository } from "../src/users/mongoUserRepository.js";
 const actor = { id: "admin-user", role: "admin" as const, roles: ["admin" as const], permissions: [] };
 
 describe("LMS admin user management", () => {
+  it("falls back to the internal projection when Keycloak list sync fails", async () => {
+    const projectedUsers = [
+      {
+        id: "learner-1",
+        keycloakSub: "keycloak-learner-1",
+        username: "learner-1",
+        email: "learner-1@example.test",
+        role: "learner",
+        roles: ["learner"],
+        permissions: ["lms_learner"],
+        enabled: true,
+        createdAt: "2026-05-12T00:00:00.000Z",
+        updatedAt: "2026-05-12T00:00:00.000Z"
+      }
+    ];
+    const keycloak = { listUsers: vi.fn().mockRejectedValue(new Error("keycloak unavailable")) };
+    const users = {
+      listActive: vi.fn().mockResolvedValue(projectedUsers),
+      upsertFromKeycloak: vi.fn()
+    };
+    const service = new AdminUserService(keycloak as unknown as KeycloakAdminClient, users as unknown as MongoUserRepository);
+
+    await expect(service.listUsers()).resolves.toEqual(projectedUsers);
+    expect(users.upsertFromKeycloak).not.toHaveBeenCalled();
+  });
+
   it("creates users in Keycloak and syncs the internal LMS projection", async () => {
     const keycloakUser: KeycloakSyncedUser = {
       keycloakSub: "keycloak-new-user",

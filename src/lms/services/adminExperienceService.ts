@@ -149,6 +149,10 @@ export class AdminExperienceService {
     return enrollment;
   }
 
+  async getEnrollmentForUserCourse(userId: string, courseId: string) {
+    return this.catalog.getEnrollmentForUserCourse(userId, courseId);
+  }
+
   async validateEnrollmentTarget(courseId: string, cohortId?: string) {
     await this.catalog.requireCourse(courseId);
     if (cohortId) {

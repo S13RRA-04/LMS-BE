@@ -13,22 +13,34 @@ export class AdminUserService {
   ) {}
 
   async listUsers() {
-    const syncedUsers = await this.keycloak.listUsers();
-    for (const user of syncedUsers) {
-      await this.users.upsertFromKeycloak({
-        keycloakSub: user.keycloakSub,
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        roles: [user.role],
-        permissions: user.permissions,
-        departmentId: user.departmentId,
-        enabled: user.enabled,
-        lastLoginAt: undefined
-      });
+    try {
+      const syncedUsers = await this.keycloak.listUsers();
+      for (const user of syncedUsers) {
+        await this.users.upsertFromKeycloak({
+          keycloakSub: user.keycloakSub,
+          username: user.username,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          roles: [user.role],
+          permissions: user.permissions,
+          departmentId: user.departmentId,
+          enabled: user.enabled,
+          lastLoginAt: undefined
+        });
+      }
+    } catch (error) {
+      const projectedUsers = await this.users.listActive();
+      if (!projectedUsers.length) {
+        throw error;
+      }
+      return projectedUsers;
     }
     return this.users.listActive();
+  }
+
+  async findUserByEmail(email: string) {
+    return this.users.getByEmail(email);
   }
 
   async createUser(actor: CurrentUser, requestId: string | undefined, input: CreateAdminUserInput) {

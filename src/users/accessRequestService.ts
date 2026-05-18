@@ -1,11 +1,12 @@
 import type { CurrentUser } from "../auth/currentUser.js";
 import type { MongoAuditLogRepository } from "../audit/mongoAuditLogRepository.js";
-import { AppError } from "../errors/AppError.js";
+import { AppError, isAppError } from "../errors/AppError.js";
 import type { AdminExperienceService } from "../lms/services/adminExperienceService.js";
 import type { AccessRequestNotifier } from "../notifications/accessRequestNotifier.js";
 import type { AdminUserService } from "./adminUserService.js";
 import type { MongoAccessRequestRepository } from "./mongoAccessRequestRepository.js";
 import type {
+  AccessRequest,
   AccessRequestStatus,
   ApproveAccessRequestInput,
   PublicAccessRequestInput,
@@ -56,40 +57,42 @@ export class AccessRequestService {
       await this.adminExperience.validateEnrollmentTarget(input.courseId, input.cohortId);
     }
 
-    const user = await this.adminUsers.createUser(actor, requestId, {
-      username: input.username?.trim() || usernameFromEmail(accessRequest.email),
-      email: accessRequest.email,
-      name: accessRequest.name,
-      role: input.role,
-      departmentId: input.departmentId,
-      enabled: true,
-      temporaryPassword: input.temporaryPassword
-    });
+    const { user, createdUser } = await this.createOrReuseUser(actor, requestId, accessRequest, input);
 
     let enrollment: Awaited<ReturnType<AdminExperienceService["createEnrollment"]>> | undefined;
+    let createdEnrollment = false;
     try {
-      enrollment = input.courseId && this.adminExperience
-        ? await this.adminExperience.createEnrollment(actor, requestId, {
+      if (input.courseId && this.adminExperience) {
+        enrollment = await this.adminExperience.createEnrollment(actor, requestId, {
             userId: user.id,
             courseId: input.courseId,
             cohortId: input.cohortId,
             status: "not_started",
             progressPercent: 0
-          })
-        : undefined;
+        });
+        createdEnrollment = true;
+      }
     } catch (error) {
-      await this.rollbackCreatedUser(actor, requestId, user.id, error);
-      throw error;
+      if (isAppError(error) && error.code === "ENROLLMENT_EXISTS" && input.courseId && this.adminExperience) {
+        enrollment = await this.adminExperience.getEnrollmentForUserCourse(user.id, input.courseId);
+        if (!enrollment) {
+          await this.rollbackUserIfCreated(actor, requestId, user.id, createdUser, error);
+          throw error;
+        }
+      } else {
+        await this.rollbackUserIfCreated(actor, requestId, user.id, createdUser, error);
+        throw error;
+      }
     }
 
     let approved: typeof accessRequest;
     try {
       approved = await this.requests.approve(id, { actorUserId: actor.id, approvedUserId: user.id });
     } catch (error) {
-      if (enrollment) {
+      if (enrollment && createdEnrollment) {
         await this.rollbackCreatedEnrollment(actor, requestId, enrollment.id, error);
       }
-      await this.rollbackCreatedUser(actor, requestId, user.id, error);
+      await this.rollbackUserIfCreated(actor, requestId, user.id, createdUser, error);
       throw error;
     }
     await this.auditLogs?.record({
@@ -131,6 +134,38 @@ export class AccessRequestService {
       await this.adminUsers.deleteUser(actor, requestId, userId);
     } catch (rollbackError) {
       logAccessRequestSideEffectFailure("user_rollback", requestId, userId, rollbackError, originalError);
+    }
+  }
+
+  private async rollbackUserIfCreated(actor: CurrentUser, requestId: string | undefined, userId: string, createdUser: boolean, originalError: unknown) {
+    if (createdUser) {
+      await this.rollbackCreatedUser(actor, requestId, userId, originalError);
+    }
+  }
+
+  private async createOrReuseUser(
+    actor: CurrentUser,
+    requestId: string | undefined,
+    accessRequest: AccessRequest,
+    input: ApproveAccessRequestInput
+  ) {
+    try {
+      const user = await this.adminUsers.createUser(actor, requestId, {
+        username: input.username?.trim() || usernameFromEmail(accessRequest.email),
+        email: accessRequest.email,
+        name: accessRequest.name,
+        role: input.role,
+        departmentId: input.departmentId,
+        enabled: true,
+        temporaryPassword: input.temporaryPassword
+      });
+      return { user, createdUser: true };
+    } catch (error) {
+      const existingUser = await this.adminUsers.findUserByEmail(accessRequest.email);
+      if (!existingUser) {
+        throw error;
+      }
+      return { user: existingUser, createdUser: false };
     }
   }
 

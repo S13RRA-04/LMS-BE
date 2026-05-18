@@ -3,6 +3,7 @@ import { AccessRequestService } from "../src/users/accessRequestService.js";
 import type { AdminUserService } from "../src/users/adminUserService.js";
 import type { MongoAccessRequestRepository } from "../src/users/mongoAccessRequestRepository.js";
 import type { AdminExperienceService } from "../src/lms/services/adminExperienceService.js";
+import { AppError } from "../src/errors/AppError.js";
 
 const actor = { id: "admin-user", role: "admin" as const, roles: ["admin" as const], permissions: [] };
 const pendingRequest = {
@@ -173,5 +174,82 @@ describe("LMS access requests", () => {
 
     expect(requests.approve).not.toHaveBeenCalled();
     expect(adminUsers.deleteUser).toHaveBeenCalledWith(actor, "request-admin", "user-1");
+  });
+
+  it("approves by reusing an existing LMS user when provisioning reports a duplicate", async () => {
+    const approvedRequest = { ...pendingRequest, status: "approved" as const, approvedUserId: "user-existing" };
+    const requests = {
+      getById: vi.fn().mockResolvedValue(pendingRequest),
+      approve: vi.fn().mockResolvedValue(approvedRequest)
+    };
+    const adminUsers = {
+      createUser: vi.fn().mockRejectedValue(new AppError(409, "USER_EXISTS", "User already exists")),
+      findUserByEmail: vi.fn().mockResolvedValue({ id: "user-existing", email: "pending@example.test", role: "learner" }),
+      deleteUser: vi.fn()
+    };
+    const adminExperience = {
+      validateEnrollmentTarget: vi.fn().mockResolvedValue(undefined),
+      createEnrollment: vi.fn().mockResolvedValue({
+        id: "enrollment-1",
+        userId: "user-existing",
+        courseId: "pact",
+        status: "not_started",
+        progressPercent: 0,
+        enrolledAt: "2026-05-14T00:00:00.000Z"
+      })
+    };
+    const service = new AccessRequestService(
+      requests as unknown as MongoAccessRequestRepository,
+      adminUsers as unknown as AdminUserService,
+      adminExperience as unknown as AdminExperienceService
+    );
+
+    const result = await service.approve(actor, "request-admin", "request-1", { role: "learner", courseId: "pact" });
+
+    expect(adminUsers.findUserByEmail).toHaveBeenCalledWith("pending@example.test");
+    expect(adminExperience.createEnrollment).toHaveBeenCalledWith(actor, "request-admin", expect.objectContaining({ userId: "user-existing" }));
+    expect(requests.approve).toHaveBeenCalledWith("request-1", { actorUserId: "admin-user", approvedUserId: "user-existing" });
+    expect(adminUsers.deleteUser).not.toHaveBeenCalled();
+    expect(result.user).toEqual(expect.objectContaining({ id: "user-existing" }));
+  });
+
+  it("approves by reusing an existing enrollment when enrollment creation reports a duplicate", async () => {
+    const approvedRequest = { ...pendingRequest, status: "approved" as const, approvedUserId: "user-existing" };
+    const existingEnrollment = {
+      id: "enrollment-existing",
+      userId: "user-existing",
+      courseId: "pact",
+      status: "not_started" as const,
+      progressPercent: 0,
+      enrolledAt: "2026-05-14T00:00:00.000Z"
+    };
+    const requests = {
+      getById: vi.fn().mockResolvedValue(pendingRequest),
+      approve: vi.fn().mockResolvedValue(approvedRequest)
+    };
+    const adminUsers = {
+      createUser: vi.fn().mockRejectedValue(new AppError(409, "USER_EXISTS", "User already exists")),
+      findUserByEmail: vi.fn().mockResolvedValue({ id: "user-existing", email: "pending@example.test", role: "learner" }),
+      deleteUser: vi.fn()
+    };
+    const adminExperience = {
+      validateEnrollmentTarget: vi.fn().mockResolvedValue(undefined),
+      createEnrollment: vi.fn().mockRejectedValue(new AppError(409, "ENROLLMENT_EXISTS", "Enrollment already exists")),
+      getEnrollmentForUserCourse: vi.fn().mockResolvedValue(existingEnrollment),
+      deleteEnrollment: vi.fn()
+    };
+    const service = new AccessRequestService(
+      requests as unknown as MongoAccessRequestRepository,
+      adminUsers as unknown as AdminUserService,
+      adminExperience as unknown as AdminExperienceService
+    );
+
+    const result = await service.approve(actor, "request-admin", "request-1", { role: "learner", courseId: "pact" });
+
+    expect(adminExperience.getEnrollmentForUserCourse).toHaveBeenCalledWith("user-existing", "pact");
+    expect(requests.approve).toHaveBeenCalledWith("request-1", { actorUserId: "admin-user", approvedUserId: "user-existing" });
+    expect(adminUsers.deleteUser).not.toHaveBeenCalled();
+    expect(adminExperience.deleteEnrollment).not.toHaveBeenCalled();
+    expect(result.enrollment).toEqual(existingEnrollment);
   });
 });

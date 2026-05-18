@@ -49,6 +49,14 @@ export class MongoUserRepository {
     return user ? toAdminUser(user) : undefined;
   }
 
+  async getByEmail(email: string): Promise<AdminUser | undefined> {
+    const user = await this.users().findOne({
+      email: { $regex: `^${escapeRegex(email.trim())}$`, $options: "i" },
+      deletedAt: { $exists: false }
+    });
+    return user ? toAdminUser(user) : undefined;
+  }
+
   async markDeleted(id: string): Promise<void> {
     const now = new Date().toISOString();
     await this.users().updateOne({ id }, { $set: { enabled: false, updatedAt: now, deletedAt: now } });
@@ -68,6 +76,10 @@ export class MongoUserRepository {
   private users(): Collection<Stored<InternalUser>> {
     return this.db.collection<Stored<InternalUser>>(this.collectionName);
   }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function toAdminUser(user: Stored<InternalUser>): AdminUser {
