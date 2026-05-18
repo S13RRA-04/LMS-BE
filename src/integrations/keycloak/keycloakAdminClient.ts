@@ -88,6 +88,11 @@ export class KeycloakAdminClient {
     return this.getUser(keycloakSub);
   }
 
+  async resetPassword(keycloakSub: string, temporaryPassword: string): Promise<KeycloakSyncedUser> {
+    await this.setTemporaryPassword(keycloakSub, temporaryPassword);
+    return this.getUser(keycloakSub);
+  }
+
   async deleteUser(keycloakSub: string): Promise<void> {
     try {
       await this.request(`/users/${encodeURIComponent(keycloakSub)}`, { method: "DELETE" });

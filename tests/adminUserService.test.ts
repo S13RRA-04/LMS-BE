@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminUserService } from "../src/users/adminUserService.js";
 import type { KeycloakAdminClient, KeycloakSyncedUser } from "../src/integrations/keycloak/keycloakAdminClient.js";
 import type { MongoUserRepository } from "../src/users/mongoUserRepository.js";
+import { AppError } from "../src/errors/AppError.js";
 
 const actor = { id: "admin-user", role: "admin" as const, roles: ["admin" as const], permissions: [] };
 
@@ -73,6 +74,49 @@ describe("LMS admin user management", () => {
     expect(users.upsertFromKeycloak).toHaveBeenCalledWith(expect.objectContaining({ keycloakSub: "keycloak-new-user", role: "learner" }));
     expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.create", targetId: "internal-new-user" }));
     expect(user).toMatchObject({ id: "internal-new-user", email: "new@example.test" });
+  });
+
+  it("recovers an existing Keycloak user by email when create reports a duplicate", async () => {
+    const keycloakUser: KeycloakSyncedUser = {
+      keycloakSub: "keycloak-existing-user",
+      username: "existing-learner",
+      email: "existing@example.test",
+      name: "Existing Learner",
+      role: "learner",
+      permissions: ["lms_learner"],
+      enabled: true
+    };
+    const keycloak = {
+      createUser: vi.fn().mockRejectedValue(new AppError(409, "USER_EXISTS", "User already exists")),
+      findUserByEmail: vi.fn().mockResolvedValue(keycloakUser),
+      updateUser: vi.fn().mockResolvedValue(keycloakUser)
+    };
+    const users = {
+      upsertFromKeycloak: vi.fn().mockImplementation((input) =>
+        Promise.resolve({
+          id: "internal-existing-user",
+          roles: [input.role],
+          createdAt: "2026-05-12T00:00:00.000Z",
+          updatedAt: "2026-05-12T00:00:00.000Z",
+          ...input
+        })
+      )
+    };
+    const service = new AdminUserService(keycloak as unknown as KeycloakAdminClient, users as unknown as MongoUserRepository);
+    const input = {
+      username: "existing-learner",
+      email: "existing@example.test",
+      role: "learner" as const,
+      enabled: true,
+      temporaryPassword: "Temporary123!"
+    };
+
+    const user = await service.createUser(actor, "request-duplicate", input);
+
+    expect(keycloak.findUserByEmail).toHaveBeenCalledWith("existing@example.test");
+    expect(keycloak.updateUser).toHaveBeenCalledWith("keycloak-existing-user", input);
+    expect(users.upsertFromKeycloak).toHaveBeenCalledWith(expect.objectContaining({ keycloakSub: "keycloak-existing-user" }));
+    expect(user).toMatchObject({ id: "internal-existing-user", email: "existing@example.test" });
   });
 
   it("syncs an existing Keycloak user when a local user is missing during lookup by email", async () => {
@@ -161,6 +205,38 @@ describe("LMS admin user management", () => {
       expect.objectContaining({ row: 2, username: "bulk-2", email: "bulk-2@example.test", message: "duplicate username" })
     ]);
     expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.bulk_create" }));
+  });
+
+  it("resets a user's temporary password through Keycloak and writes an audit log", async () => {
+    const keycloakUser: KeycloakSyncedUser = {
+      keycloakSub: "keycloak-learner-1",
+      username: "learner-1",
+      email: "learner-1@example.test",
+      name: "Learner One",
+      role: "learner",
+      permissions: ["lms_learner"],
+      enabled: true
+    };
+    const keycloak = { resetPassword: vi.fn().mockResolvedValue(keycloakUser) };
+    const users = {
+      getById: vi.fn().mockResolvedValue({ id: "learner-1", keycloakSub: "keycloak-learner-1", lastLoginAt: "2026-05-12T00:00:00.000Z" }),
+      upsertFromKeycloak: vi.fn().mockImplementation((input) =>
+        Promise.resolve({
+          id: "learner-1",
+          createdAt: "2026-05-12T00:00:00.000Z",
+          updatedAt: "2026-05-12T00:00:00.000Z",
+          ...input
+        })
+      )
+    };
+    const auditLogs = { record: vi.fn().mockResolvedValue(undefined) };
+    const service = new AdminUserService(keycloak as unknown as KeycloakAdminClient, users as unknown as MongoUserRepository, auditLogs as never);
+
+    await service.resetPassword(actor, "request-reset", "learner-1", { temporaryPassword: "ResetPass123!" });
+
+    expect(keycloak.resetPassword).toHaveBeenCalledWith("keycloak-learner-1", "ResetPass123!");
+    expect(users.upsertFromKeycloak).toHaveBeenCalledWith(expect.objectContaining({ keycloakSub: "keycloak-learner-1", lastLoginAt: "2026-05-12T00:00:00.000Z" }));
+    expect(auditLogs.record).toHaveBeenCalledWith(expect.objectContaining({ action: "user.password.reset", targetId: "learner-1" }));
   });
 
   it("soft-deletes the internal projection after deleting the Keycloak user", async () => {

@@ -102,6 +102,10 @@ export const adminUserUpdateSchema = adminUserCreateSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: "At least one user field is required" });
 
+export const adminUserPasswordResetSchema = z.object({
+  temporaryPassword: z.string().min(12).max(256)
+}).strict();
+
 export const accessRequestCreateSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email().max(255)

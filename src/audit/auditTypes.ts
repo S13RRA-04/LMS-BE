@@ -16,6 +16,7 @@ export type AuditAction =
   | "user.create"
   | "user.bulk_create"
   | "user.update"
+  | "user.password.reset"
   | "user.delete";
 
 export type AuditLog = {

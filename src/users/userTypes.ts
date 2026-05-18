@@ -66,6 +66,10 @@ export type UpdateAdminUserInput = {
   temporaryPassword?: string;
 };
 
+export type ResetAdminUserPasswordInput = {
+  temporaryPassword: string;
+};
+
 export type AccessRequestStatus = "pending" | "approved" | "rejected";
 
 export type AccessRequest = {

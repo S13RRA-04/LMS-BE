@@ -17,6 +17,7 @@ import {
   accessRequestStatusSchema,
   adminUserBulkCreateSchema,
   adminUserCreateSchema,
+  adminUserPasswordResetSchema,
   adminUserUpdateSchema,
   cohortCreateSchema,
   cohortUpdateSchema,
@@ -482,6 +483,20 @@ async function routeLms(context: RequestContext, path: string): Promise<RouteRes
   }
 
   const userMatch = path.match(/^\/lms\/admin\/users\/([^/]+)$/);
+  const userPasswordResetMatch = path.match(/^\/lms\/admin\/users\/([^/]+)\/reset-password$/);
+  if (userPasswordResetMatch && request.method === "POST") {
+    requireRole(currentUser, ["admin"]);
+    const { adminUsers } = await services(config);
+    return {
+      body: await adminUsers.resetPassword(
+        currentUser,
+        requestId,
+        decodeURIComponent(userPasswordResetMatch[1]),
+        adminUserPasswordResetSchema.parse(await jsonBody(request))
+      )
+    };
+  }
+
   if (userMatch && request.method === "PATCH") {
     requireRole(currentUser, ["admin"]);
     const { adminUsers } = await services(config);

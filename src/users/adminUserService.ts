@@ -1,9 +1,9 @@
 import type { CurrentUser } from "../auth/currentUser.js";
 import type { MongoAuditLogRepository } from "../audit/mongoAuditLogRepository.js";
-import { AppError } from "../errors/AppError.js";
+import { AppError, isAppError } from "../errors/AppError.js";
 import type { KeycloakAdminClient } from "../integrations/keycloak/keycloakAdminClient.js";
 import type { MongoUserRepository } from "./mongoUserRepository.js";
-import type { AdminUser, CreateAdminUserInput, UpdateAdminUserInput } from "./userTypes.js";
+import type { AdminUser, CreateAdminUserInput, ResetAdminUserPasswordInput, UpdateAdminUserInput } from "./userTypes.js";
 
 export class AdminUserService {
   constructor(
@@ -65,19 +65,8 @@ export class AdminUserService {
   }
 
   async createUser(actor: CurrentUser, requestId: string | undefined, input: CreateAdminUserInput) {
-    const syncedUser = await this.keycloak.createUser(input);
-    const user = await this.users.upsertFromKeycloak({
-      keycloakSub: syncedUser.keycloakSub,
-      username: syncedUser.username,
-      email: syncedUser.email,
-      name: syncedUser.name,
-      role: syncedUser.role,
-      roles: [syncedUser.role],
-      permissions: syncedUser.permissions,
-      departmentId: syncedUser.departmentId,
-      enabled: syncedUser.enabled,
-      lastLoginAt: undefined
-    });
+    const syncedUser = await this.createOrRecoverKeycloakUser(input);
+    const user = await this.syncUser(syncedUser);
 
     await this.auditLogs?.record({
       action: "user.create",
@@ -119,6 +108,27 @@ export class AdminUserService {
     });
 
     return { created, failed };
+  }
+
+  async resetPassword(actor: CurrentUser, requestId: string | undefined, id: string, input: ResetAdminUserPasswordInput) {
+    const existing = await this.users.getById(id);
+    if (!existing) {
+      throw new AppError(404, "USER_NOT_FOUND", "User was not found");
+    }
+
+    const syncedUser = await this.keycloak.resetPassword(existing.keycloakSub, input.temporaryPassword);
+    const user = await this.syncUser(syncedUser, existing.lastLoginAt);
+
+    await this.auditLogs?.record({
+      action: "user.password.reset",
+      actor,
+      targetType: "user",
+      targetId: user.id,
+      requestId,
+      metadata: { keycloakSub: user.keycloakSub }
+    });
+
+    return user;
   }
 
   async updateUser(actor: CurrentUser, requestId: string | undefined, id: string, input: UpdateAdminUserInput) {
@@ -174,6 +184,38 @@ export class AdminUserService {
       targetId: existing.id,
       requestId,
       metadata: { keycloakSub: existing.keycloakSub }
+    });
+  }
+
+  private async createOrRecoverKeycloakUser(input: CreateAdminUserInput) {
+    try {
+      return await this.keycloak.createUser(input);
+    } catch (error) {
+      if (!isAppError(error) || error.code !== "USER_EXISTS") {
+        throw error;
+      }
+
+      const existing = await this.keycloak.findUserByEmail(input.email);
+      if (!existing) {
+        throw error;
+      }
+
+      return this.keycloak.updateUser(existing.keycloakSub, input);
+    }
+  }
+
+  private async syncUser(syncedUser: Awaited<ReturnType<KeycloakAdminClient["getUser"]>>, lastLoginAt?: string) {
+    return this.users.upsertFromKeycloak({
+      keycloakSub: syncedUser.keycloakSub,
+      username: syncedUser.username,
+      email: syncedUser.email,
+      name: syncedUser.name,
+      role: syncedUser.role,
+      roles: [syncedUser.role],
+      permissions: syncedUser.permissions,
+      departmentId: syncedUser.departmentId,
+      enabled: syncedUser.enabled,
+      lastLoginAt
     });
   }
 }
